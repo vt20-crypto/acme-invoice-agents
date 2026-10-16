@@ -67,3 +67,32 @@ def test_scores_add_up_to_reject():
 def test_formerly_plus_near_threshold_holds():
     r = assess(inv(total=9975.0), "(formerly FastShip Ltd.)")
     assert r.score == 4 and sev(r) == "hold"
+
+
+def test_denylist_matching_is_robust_to_case_punctuation_and_abbreviations():
+    from invoice_agents.risk import DEMO_ADDRESS_DENYLIST
+
+    assert len(DEMO_ADDRESS_DENYLIST) == 8
+    for text in [
+        "1600 PENNSYLVANIA AVENUE NW, Washington",
+        "1600 pennsylvania ave., DC",
+        "742 Evergreen Terr, Springfield",
+        "221b  Baker St.",
+        "4 Privet Dr",
+        "12 Grimmauld Pl, London",
+        "124 Conch Street, Bikini Bottom",
+        "31 Spooner St, Quahog",
+        "1640 Riverside Drive, Hill Valley",
+    ]:
+        assert "demo_address" in names(assess(inv(), text)), text
+    assert sev(assess(inv(), "742 Evergreen Terrace")) == "reject"
+
+
+def test_denylist_does_not_match_look_alikes():
+    for text in [
+        "14 Privet Drive",
+        "1600 Pennsylvania Rd",
+        "500 Commerce Blvd",
+        "7421 Evergreen Terrace",
+    ]:
+        assert "demo_address" not in names(assess(inv(), text)), text

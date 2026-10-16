@@ -1,0 +1,15 @@
+{
+  "provenance": "authored",
+  "note": "Hand-written fixture, not a model output",
+  "response": {
+    "decision": "APPROVE",
+    "reasons": [
+      {"claim": "Total of 10,750.00 exceeds 10,000, so the strict standard applies; all checks below support approval.", "fact_ref": "invoice.total"},
+      {"claim": "Invoice arithmetic reconciles exactly.", "fact_ref": "validation.arithmetic"},
+      {"claim": "All three line items resolve to inventory SKUs.", "fact_ref": "validation.items"},
+      {"claim": "GadgetX quantity equals stock on hand, which is within stock.", "fact_ref": "stock.GadgetX"},
+      {"claim": "No validation or risk blockers were raised.", "fact_ref": "check.blockers"},
+      {"claim": "Risk score is zero.", "fact_ref": "risk.score"}
+    ]
+  }
+}

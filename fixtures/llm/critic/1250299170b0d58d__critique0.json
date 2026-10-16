@@ -1,0 +1,5 @@
+{
+  "provenance": "authored",
+  "note": "Hand-written fixture, not a model output",
+  "response": {"verdict": "pass", "issues": []}
+}

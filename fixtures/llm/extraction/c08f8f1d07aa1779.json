@@ -1,0 +1,19 @@
+{
+  "provenance": "authored",
+  "note": "Hand-written fixture, not a model output",
+  "response": {
+    "vendor": "Gadgets Co.",
+    "invoice_number": "1002",
+    "invoice_date": "2026-01-30",
+    "due_date": "2026-01-30",
+    "currency": "USD",
+    "line_items": [
+      {"raw_name": "GadgetX", "sku": null, "quantity": 20, "unit_price": 750.0, "line_total": null}
+    ],
+    "charges": [],
+    "subtotal": null,
+    "tax": null,
+    "total": 15000.0,
+    "notes": ["Payment terms: Net 30"]
+  }
+}

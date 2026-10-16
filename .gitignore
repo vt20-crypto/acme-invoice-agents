@@ -1,0 +1,8 @@
+.env
+*.db
+.venv/
+__pycache__/
+*.pyc
+results*.jsonl
+.pytest_cache/
+.ruff_cache/

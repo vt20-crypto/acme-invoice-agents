@@ -1,0 +1,11 @@
+{
+  "provenance": "authored",
+  "note": "Hand-written fixture, not a model output",
+  "response": {
+    "items": [
+      {"raw_name": "Widget-A assembly unit", "sku": "WidgetA"},
+      {"raw_name": "Widget-B assembly unit", "sku": "WidgetB"},
+      {"raw_name": "GX gadget (model X)", "sku": "GadgetX"}
+    ]
+  }
+}

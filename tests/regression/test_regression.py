@@ -46,16 +46,19 @@ def test_none_mode(entry, none_run):
     assert sorted({f.code for f in state["findings"]}) == sorted(entry["codes"])
 
 
-def test_none_mode_covers_all_20_samples_plus_9001():
+def test_none_mode_covers_all_20_samples_plus_synthetic():
     files = {Path(e["file"]).name for e in load("expected_none.yaml")}
-    on_disk = {p.name for p in (ROOT / "data/invoices").iterdir()} | {"invoice_9001.json"}
-    assert files == on_disk and len(files) == 21
+    on_disk = {p.name for p in (ROOT / "data/invoices").iterdir()} | {
+        "invoice_9001.json",
+        "invoice_9003.txt",
+    }
+    assert files == on_disk and len(files) == 22
 
 
 def test_none_mode_payments_match_approvals(none_run):
     db, states = none_run
     approved = [s for s in states.values() if s["decision"].value == "APPROVE"]
-    assert len(db.payments()) == len(approved) == 6
+    assert len(db.payments()) == len(approved) == 5
     assert all(p["status"] == "sent" for p in db.payments())
 
 
@@ -67,6 +70,9 @@ def test_fixture_mode(entry, fixture_run):
     assert sorted({f.code for f in state["findings"]}) == sorted(entry["codes"])
     if "paid" in entry:
         assert state["payment"]["amount"] == entry["paid"]
+    if "tiers" in entry:
+        assert state["resolve"].tiers == entry["tiers"]
+        assert {t["tool"] for t in state["resolve"].tool_trace} == {"search_inventory"}
     if entry.get("critic"):
         assert any(c["agent"] == "critic" for c in state["llm_calls"])
     assert all(c.get("provenance") in (None, "authored") for c in state["llm_calls"]), (

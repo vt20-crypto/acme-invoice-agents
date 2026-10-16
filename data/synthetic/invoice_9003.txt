@@ -1,0 +1,17 @@
+INVOICE
+
+Vendor: Northfield Industrial Components LLC
+Invoice Number: NIC-20931
+Date: 2026-02-09
+Due Date: 2026-03-11
+
+Items:
+  Widget-A assembly unit    qty: 6    unit price: $250.00
+  Widget-B assembly unit    qty: 4    unit price: $500.00
+  GX gadget (model X)       qty: 3    unit price: $750.00
+
+Subtotal: $5,750.00
+Tax (6%): $345.00
+Total Amount: $6,095.00
+
+Payment Terms: Net 30

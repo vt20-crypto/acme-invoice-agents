@@ -172,6 +172,12 @@ def build_graph(ctx: Context):
         inv = state["invoice"]
         assert inv is not None
         res = validate(inv, state["resolve"].proposed, db)
+        tiers = state["resolve"].tiers
+        res.facts["resolution.tiers"] = (
+            f"{tiers.count('code')} line(s) resolved by code, "
+            f"{tiers.count('llm')} by LLM tool call, {tiers.count('unresolved')} unresolved; "
+            "every SKU re-verified exactly in the database"
+        )
         if state["resolve"].error:
             # An LLM outage must not look like proof that the items are fake.
             for f in res.findings:
@@ -201,6 +207,9 @@ def build_graph(ctx: Context):
             blockers = [x.code for x in res.findings if x.severity in ("reject", "hold")]
             res.facts["check.blockers"] = ", ".join(blockers) if blockers else "none"
         lines = [f"[{f.severity}] {f.code}: {f.message}" for f in res.findings] or ["no findings"]
+        n_llm = state["resolve"].tiers.count("llm")
+        if n_llm:
+            lines.insert(0, f"re-verified {n_llm} LLM-proposed SKU(s) exactly against inventory")
         lines.insert(0, f"content_hash={res.content_hash[:12] if res.content_hash else None}")
         audit(state, "validate", {"findings": [f.model_dump() for f in res.findings]})
         return {

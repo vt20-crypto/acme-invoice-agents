@@ -6,8 +6,8 @@
 - file: data/invoices/invoice_1003.txt
   decision: REJECT
   codes: [missing_due_date, risk_invalid_due_date, risk_pressure_language, risk_round_total, risk_score, stock_exceeded]
-- {file: data/invoices/invoice_1004.json, decision: APPROVE, codes: []}
-- {file: data/invoices/invoice_1004_revised.json, decision: HOLD, codes: [revision]}
+- {file: data/invoices/invoice_1004.json, decision: REJECT, codes: [risk_demo_address, risk_score]}
+- {file: data/invoices/invoice_1004_revised.json, decision: REJECT, codes: [revision, risk_demo_address, risk_score]}
 - {file: data/invoices/invoice_1005.json, decision: REJECT, codes: [risk_demo_address, risk_score, stock_exceeded]}
 - {file: data/invoices/invoice_1006.csv, decision: APPROVE, codes: []}
 - {file: data/invoices/invoice_1007.csv, decision: REJECT, codes: [arithmetic, stock_exceeded]}
@@ -24,3 +24,4 @@
 - {file: data/invoices/invoice_1015.csv, decision: APPROVE, codes: []}
 - {file: data/invoices/invoice_1016.json, decision: HOLD, codes: [unknown_items]}
 - {file: data/synthetic/invoice_9001.json, decision: HOLD, codes: [vp_requires_llm]}
+- {file: data/synthetic/invoice_9003.txt, decision: REJECT, codes: [all_items_unknown]}

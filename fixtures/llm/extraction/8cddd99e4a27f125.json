@@ -1,0 +1,21 @@
+{
+  "provenance": "authored",
+  "note": "Hand-written fixture, not a model output",
+  "response": {
+    "vendor": "Northfield Industrial Components LLC",
+    "invoice_number": "NIC-20931",
+    "invoice_date": "2026-02-09",
+    "due_date": "2026-03-11",
+    "currency": "USD",
+    "line_items": [
+      {"raw_name": "Widget-A assembly unit", "sku": null, "quantity": 6, "unit_price": 250.0, "line_total": null},
+      {"raw_name": "Widget-B assembly unit", "sku": null, "quantity": 4, "unit_price": 500.0, "line_total": null},
+      {"raw_name": "GX gadget (model X)", "sku": null, "quantity": 3, "unit_price": 750.0, "line_total": null}
+    ],
+    "charges": [],
+    "subtotal": 5750.0,
+    "tax": 345.0,
+    "total": 6095.0,
+    "notes": ["Payment Terms: Net 30"]
+  }
+}

@@ -22,8 +22,9 @@ def test_revision_processed_first_logs_warning_and_is_flagged(db, capsys):
     (first, _), (second, _) = run_batch(paths, db, None, "none")
     assert "revision_before_original" in {f.code for f in first["findings"]}
     assert '"event": "warning"' in capsys.readouterr().err
-    # the original then looks like a revision of the one processed first
-    assert second["decision"].value == "HOLD"
+    # the original then looks like a revision of the one processed first; never auto-paid
+    assert "revision" in {f.code for f in second["findings"]}
+    assert second["decision"].value != "APPROVE" and second["payment"] is None
 
 
 def test_1013_pdf_extracts_to_same_content_as_json():

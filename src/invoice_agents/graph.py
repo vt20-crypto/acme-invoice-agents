@@ -18,6 +18,7 @@ from .logs import jlog
 from .models import Decision, Finding, Invoice, Reason
 from .payments import pay_invoice
 from .resolve import ResolveOutcome, resolve_items
+from .risk import assess
 from .validation import ValidationResult, number_key, validate, vendor_key
 
 
@@ -162,6 +163,19 @@ def build_graph(ctx: Context):
         inv = state["invoice"]
         assert inv is not None
         res = validate(inv, state["resolve"].proposed, db)
+        if not res.duplicate_of:
+            vk = vendor_key(inv)
+            known = bool(
+                vk
+                and db.conn.execute(
+                    "SELECT 1 FROM invoices WHERE vendor_norm = ?", (vk,)
+                ).fetchone()
+            )
+            risk = assess(inv, state["doc"].raw_text, known_vendor=known)
+            res.findings.extend(risk.findings)
+            res.facts["risk.score"] = str(risk.score)
+            blockers = [x.code for x in res.findings if x.severity in ("reject", "hold")]
+            res.facts["check.blockers"] = ", ".join(blockers) if blockers else "none"
         lines = [f"[{f.severity}] {f.code}: {f.message}" for f in res.findings] or ["no findings"]
         lines.insert(0, f"content_hash={res.content_hash[:12] if res.content_hash else None}")
         audit(state, "validate", {"findings": [f.model_dump() for f in res.findings]})

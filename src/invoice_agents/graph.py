@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import operator
+import re
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -20,6 +22,8 @@ from .payments import pay_invoice
 from .resolve import ResolveOutcome, resolve_items
 from .risk import assess
 from .validation import ValidationResult, number_key, validate, vendor_key
+
+REVISION_NAME = re.compile(r"revis|amend|correct", re.I)
 
 
 @dataclass
@@ -173,6 +177,16 @@ def build_graph(ctx: Context):
             for f in res.findings:
                 if f.code == "all_items_unknown":
                     f.severity = "hold"
+        if (
+            REVISION_NAME.search(Path(state["path"]).name)
+            and not res.duplicate_of
+            and not any(f.code == "revision" for f in res.findings)
+        ):
+            msg = "File name looks like a revision but no original is in the ledger yet."
+            res.findings.append(
+                Finding(code="revision_before_original", severity="note", message=msg)
+            )
+            jlog("warning", run_id=ctx.run_id, file=state["path"], message=msg)
         if not res.duplicate_of:
             vk = vendor_key(inv)
             known = bool(

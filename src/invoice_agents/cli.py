@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .batch import collect_files, result_record, summary_table, write_results
 from .db import Database
 from .graph import Context, PipelineState, process_invoice
 from .ingestion.parsers import parse_file
@@ -18,6 +19,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="main.py", description="Acme invoice processing agents")
     p.add_argument("command", nargs="?", choices=["run", "reset"], default="run")
     p.add_argument("--invoice_path", help="path to an invoice file (txt, pdf, csv, json, xml)")
+    p.add_argument(
+        "--batch",
+        nargs="+",
+        metavar="DIR",
+        help="process every invoice file in these directories, in order: directories as given, "
+        "files within each sorted by file name (Python sorted(), byte order)",
+    )
+    p.add_argument("--out", metavar="FILE", help="write one JSON line per document (overwrites)")
+    p.add_argument("--verbose", action="store_true", help="in batch mode print every step")
     p.add_argument("--llm", choices=["fixture", "none", "live"], default="fixture")
     p.add_argument("--db", default="acme.db", help="SQLite database file")
     p.add_argument("--fixtures", default="fixtures/llm", help="fixture directory for --llm fixture")
@@ -77,12 +87,11 @@ def main(argv: list[str] | None = None) -> int:
             db.reset()
             print(f"Database {args.db} reset and reseeded.")
             return 0
-        if not args.invoice_path:
-            print("error: --invoice_path is required", file=sys.stderr)
+        if not args.invoice_path and not args.batch:
+            print("error: --invoice_path or --batch is required", file=sys.stderr)
             return 2
-        path = Path(args.invoice_path)
-        if not path.exists():
-            print(f"error: file not found: {path}", file=sys.stderr)
+        if args.invoice_path and not Path(args.invoice_path).exists():
+            print(f"error: file not found: {args.invoice_path}", file=sys.stderr)
             return 2
         if args.fresh:
             db.reset()
@@ -91,12 +100,21 @@ def main(argv: list[str] | None = None) -> int:
         except LLMUnavailable as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        ctx = Context(db=db, client=client, llm_mode=args.llm)
-        prior = db.find_by_fingerprint(parse_file(path).fingerprint)
-        jlog("run_start", run_id=ctx.run_id, file=str(path), llm=args.llm)
-        state = process_invoice(str(path), ctx)
-        jlog("run_end", run_id=ctx.run_id, decision=state["decision"].value)
-        print(render(state, ctx, prior))
+        paths = collect_files(args.batch) if args.batch else [Path(args.invoice_path)]
+        records = []
+        for path in paths:
+            ctx = Context(db=db, client=client, llm_mode=args.llm)
+            prior = db.find_by_fingerprint(parse_file(path).fingerprint)
+            jlog("run_start", run_id=ctx.run_id, file=str(path), llm=args.llm)
+            state = process_invoice(str(path), ctx)
+            jlog("run_end", run_id=ctx.run_id, decision=state["decision"].value)
+            records.append(result_record(state, ctx.run_id))
+            if not args.batch or args.verbose:
+                print(render(state, ctx, prior))
+        if args.batch:
+            print(summary_table(records))
+        if args.out:
+            write_results(args.out, records)
         return 0
     finally:
         db.close()

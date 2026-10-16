@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import operator
 import re
 import uuid
@@ -296,6 +297,9 @@ def build_graph(ctx: Context):
             currency=inv.currency if inv else None,
             duplicate_of=state.get("duplicate_of"),
             run_id=ctx.run_id,
+            vendor=inv.vendor if inv else None,
+            invoice_number=inv.invoice_number if inv else None,
+            findings_json=json.dumps([f.model_dump() for f in findings]),
         )
         lines = [f"final decision={decision.value}  ledger id={ledger_id}"]
         if decision is not Decision.APPROVE:

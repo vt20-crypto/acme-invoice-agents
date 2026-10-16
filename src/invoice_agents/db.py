@@ -27,7 +27,12 @@ CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_file TEXT, fingerprint TEXT, vendor_norm TEXT, invoice_number_norm TEXT,
     content_hash TEXT, decision TEXT, total REAL, currency TEXT, duplicate_of INTEGER,
-    processed_at TEXT, run_id TEXT
+    processed_at TEXT, run_id TEXT,
+    vendor TEXT, invoice_number TEXT, findings_json TEXT, review_status TEXT
+);
+CREATE TABLE IF NOT EXISTS reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ledger_id INTEGER, action TEXT, note TEXT, reviewer TEXT, outcome TEXT, ts TEXT
 );
 CREATE TABLE IF NOT EXISTS payments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +60,11 @@ class Database:
 
     def init_schema(self) -> None:
         self.conn.executescript(SCHEMA)
+        # Light migration for databases created before the review columns existed.
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(invoices)")}
+        for col in ("vendor", "invoice_number", "findings_json", "review_status"):
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE invoices ADD COLUMN {col} TEXT")
         self.conn.commit()
 
     def seed(self) -> None:
@@ -66,6 +76,7 @@ class Database:
         self.conn.executescript(
             "DROP TABLE IF EXISTS inventory; DROP TABLE IF EXISTS invoices;"
             "DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS audit_events;"
+            "DROP TABLE IF EXISTS reviews;"
         )
         self.init_schema()
         self.seed()
@@ -135,11 +146,15 @@ class Database:
         currency: str | None,
         duplicate_of: int | None,
         run_id: str,
+        vendor: str | None = None,
+        invoice_number: str | None = None,
+        findings_json: str | None = None,
     ) -> int:
         cur = self.conn.execute(
             "INSERT INTO invoices (source_file, fingerprint, vendor_norm, invoice_number_norm, "
-            "content_hash, decision, total, currency, duplicate_of, processed_at, run_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "content_hash, decision, total, currency, duplicate_of, processed_at, run_id, "
+            "vendor, invoice_number, findings_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 source_file,
                 fingerprint,
@@ -152,10 +167,48 @@ class Database:
                 duplicate_of,
                 _now(),
                 run_id,
+                vendor,
+                invoice_number,
+                findings_json,
             ),
         )
         self.conn.commit()
         return int(cur.lastrowid or 0)
+
+    def get_ledger(self, ledger_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM invoices WHERE id = ?", (ledger_id,)).fetchone()
+        return dict(row) if row else None
+
+    def ledger(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute("SELECT * FROM invoices ORDER BY id")]
+
+    def update_ledger_review(
+        self, ledger_id: int, decision: str | None, review_status: str
+    ) -> None:
+        with self.conn:
+            if decision:
+                self.conn.execute(
+                    "UPDATE invoices SET decision = ?, review_status = ? WHERE id = ?",
+                    (decision, review_status, ledger_id),
+                )
+            else:
+                self.conn.execute(
+                    "UPDATE invoices SET review_status = ? WHERE id = ?", (review_status, ledger_id)
+                )
+
+    def add_review(
+        self, ledger_id: int, action: str, note: str, reviewer: str, outcome: str
+    ) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO reviews (ledger_id, action, note, reviewer, outcome, ts) "
+                "VALUES (?,?,?,?,?,?)",
+                (ledger_id, action, note, reviewer, outcome, _now()),
+            )
+        return int(cur.lastrowid or 0)
+
+    def reviews(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute("SELECT * FROM reviews ORDER BY id")]
 
     # --- payments ----------------------------------------------------------------------
 

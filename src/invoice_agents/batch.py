@@ -10,6 +10,7 @@ from typing import Any
 from .db import Database
 from .graph import Context, PipelineState, process_invoice
 from .llm.client import LLMClient
+from .presentation import key_codes
 
 SUPPORTED = {".txt", ".pdf", ".csv", ".json", ".xml"}
 
@@ -71,8 +72,7 @@ def write_results(path: str | Path, records: Iterable[dict[str, Any]]) -> None:
 def summary_table(records: list[dict[str, Any]]) -> str:
     rows = [("file", "decision", "key findings")]
     for r in records:
-        keys = [c for c in r["codes"] if not c.startswith("risk_") or c == "risk_score"]
-        rows.append((Path(r["file"]).name, r["decision"], ", ".join(keys) or "-"))
+        rows.append((Path(r["file"]).name, r["decision"], key_codes(r)))
     w = [max(len(row[i]) for row in rows) for i in range(2)]
     lines = [f"{a:<{w[0]}}  {b:<{w[1]}}  {c}" for a, b, c in rows]
     lines.insert(1, "-" * len(lines[0]))

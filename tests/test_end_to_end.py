@@ -35,7 +35,7 @@ def test_1001_fixture_mode_approves_and_pays_5000(tmp_path, capsys):
     assert "Decision: APPROVE" in out
     assert out.count("Paid 5000.0 to Widgets Inc.") == 1
     assert "extraction/initial: authored" in out and "vp_approval/draft: authored" in out
-    assert "search_inventory" in out  # real tool calls ran
+    assert "[tier=code]" in out and "tool call" not in out  # code tier resolved both lines
     assert payments(tmp_path) == [(5000.0, "sent")]
     assert '"event": "run_end"' in err  # structured logs on stderr
 

@@ -1,8 +1,0 @@
-{
-  "provenance": "authored",
-  "note": "Hand-written fixture, not a model output",
-  "tool_calls": [
-    {"name": "search_inventory", "arguments": {"query": "WidgetA"}},
-    {"name": "search_inventory", "arguments": {"query": "WidgetB"}}
-  ]
-}

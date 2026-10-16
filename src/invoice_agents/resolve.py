@@ -27,10 +27,11 @@ RESOLVE_SYSTEM = (
 @dataclass
 class ResolveOutcome:
     proposed: list[str | None]
-    method: str  # llm | code
+    tiers: list[str]  # per line: "code" | "llm" | "unresolved"
+    method: str  # code | tiered (an LLM tool round was needed)
     provenance: str | None = None
     tool_trace: list[dict[str, Any]] = field(default_factory=list)
-    error: str | None = None  # set when the LLM path failed and code resolution was used
+    error: str | None = None  # set when the LLM path failed (lines stay unresolved)
 
 
 def search_inventory_tool(db: Database) -> Tool:
@@ -49,27 +50,30 @@ def search_inventory_tool(db: Database) -> Tool:
 def resolve_items(
     invoice: Invoice, db: Database, client: LLMClient | None, key: str
 ) -> ResolveOutcome:
-    if client is None:
-        return ResolveOutcome(code_resolve(invoice, db), "code")
+    """Tier 1: exact match after code normalization. Tier 2: the LLM, with the search_inventory
+    tool, only for names tier 1 could not resolve. Validation re-checks every SKU afterwards."""
+    proposed = code_resolve(invoice, db)
+    tiers = ["code" if sku else "unresolved" for sku in proposed]
+    todo = [i for i, sku in enumerate(proposed) if sku is None]
+    if not todo or client is None:
+        return ResolveOutcome(proposed, tiers, "code")
+    names = [invoice.line_items[i].raw_name for i in todo]
     messages = [
         {"role": "system", "content": RESOLVE_SYSTEM},
-        {
-            "role": "user",
-            "content": json.dumps({"line_items": [li.raw_name for li in invoice.line_items]}),
-        },
+        {"role": "user", "content": json.dumps({"line_items": names})},
     ]
     try:
         result = client.tool_call_round(
             "resolve_items", messages, [search_inventory_tool(db)], ResolutionResult, key=key
         )
     except (LLMUnavailable, SchemaValidationFailed) as exc:
-        return ResolveOutcome(code_resolve(invoice, db), "code", error=str(exc))
+        return ResolveOutcome(proposed, tiers, "tiered", error=str(exc))
     assert isinstance(result.obj, ResolutionResult)
     pool = list(result.obj.items)
-    proposed: list[str | None] = []
-    for li in invoice.line_items:
-        match = next((r for r in pool if r.raw_name == li.raw_name), None)
+    for i in todo:
+        match = next((r for r in pool if r.raw_name == invoice.line_items[i].raw_name), None)
         if match:
             pool.remove(match)
-        proposed.append(match.sku if match else None)
-    return ResolveOutcome(proposed, "llm", result.provenance, result.tool_trace)
+            if match.sku:
+                proposed[i], tiers[i] = match.sku, "llm"
+    return ResolveOutcome(proposed, tiers, "tiered", result.provenance, result.tool_trace)

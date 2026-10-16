@@ -130,10 +130,10 @@ def build_graph(ctx: Context):
         ]
         for t in out.tool_trace:
             lines.append(f"tool call {t['tool']}({t['arguments']}) -> {t['result']}")
-        for li, sku in zip(inv.line_items, out.proposed, strict=True):
-            lines.append(f"{li.raw_name!r} -> {sku}")
+        for li, sku, tier in zip(inv.line_items, out.proposed, out.tiers, strict=True):
+            lines.append(f"{li.raw_name!r} -> {sku}  [tier={tier}]")
         if out.error:
-            lines.append(f"LLM resolution failed, used code normalization: {out.error}")
+            lines.append(f"LLM resolution failed; unresolved lines stay unknown: {out.error}")
             findings.append(
                 Finding(
                     code="llm_unavailable",
@@ -150,7 +150,12 @@ def build_graph(ctx: Context):
         audit(
             state,
             "resolve_items",
-            {"method": out.method, "proposed": out.proposed, "tool_calls": len(out.tool_trace)},
+            {
+                "method": out.method,
+                "proposed": out.proposed,
+                "tiers": out.tiers,
+                "tool_calls": len(out.tool_trace),
+            },
         )
         return {
             "resolve": out,
@@ -163,6 +168,11 @@ def build_graph(ctx: Context):
         inv = state["invoice"]
         assert inv is not None
         res = validate(inv, state["resolve"].proposed, db)
+        if state["resolve"].error:
+            # An LLM outage must not look like proof that the items are fake.
+            for f in res.findings:
+                if f.code == "all_items_unknown":
+                    f.severity = "hold"
         if not res.duplicate_of:
             vk = vendor_key(inv)
             known = bool(

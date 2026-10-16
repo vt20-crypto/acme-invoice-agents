@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import pytest
@@ -81,6 +80,3 @@ def test_fixture_mode_file_without_fixtures_holds_llm_unavailable(tmp_path):
     st = states["data/invoices/invoice_1012.txt"]
     assert st["decision"].value == "HOLD"
     assert {"uncertain_extraction", "llm_unavailable"} <= {f.code for f in st["findings"]}
-
-
-sys.dont_write_bytecode = True

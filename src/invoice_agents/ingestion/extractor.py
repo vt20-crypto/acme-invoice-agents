@@ -173,7 +173,7 @@ _ITEM_A = re.compile(
 )
 _ITEM_B = re.compile(
     r"^\s*(?P<name>[A-Za-z][\w ()\-]*?)\s+(?P<qty>\d+)\s+\$(?P<price>[\d,]+\.\d{2})"
-    r"\s+\$(?P<amt>[\d,]+\.\d{2})\s*$"
+    r"\s+\$(?P<amt>[\d,]+\.\d{2})(?:\s+[A-Za-z].*)?$"  # optional trailing notes column
 )
 
 
@@ -185,9 +185,12 @@ def _label(text: str, pattern: str) -> str | None:
 def extract_labelled(doc: RawDocument) -> ExtractionResult:
     """Best-effort extraction for plainly labelled text. Messy files come back uncertain."""
     t = doc.raw_text
-    vendor = _label(t, r"^\s*vendor\s*:\s*(.+)$")
-    number = _label(t, r"^\s*invoice\s*(?:number|no\.?)\s*[:#]\s*([\w-]+)") or _label(
-        t, r"^\s*invoice\s*#\s*([\w-]+)"
+    # Labels may share a line ("Vendor: X Due: Y"), so the vendor value stops at the next label.
+    vendor = _label(t, r"^\s*vendor\s*:\s*(.+?)(?=\s+(?:due|date|terms)\b\s*:|$)")
+    number = (
+        _label(t, r"^\s*invoice\s*(?:number|no\.?)\s*[:#]\s*([\w-]+)")
+        or _label(t, r"^\s*invoice\s*#\s*([\w-]+)")
+        or _label(t, r"^\s*invoice\s*:\s*([\w-]+)")
     )
     items: list[LineItem] = []
     for line in t.splitlines():
@@ -221,8 +224,17 @@ def extract_labelled(doc: RawDocument) -> ExtractionResult:
     inv = Invoice(
         vendor=vendor,
         invoice_number=number,
-        invoice_date=_date_with_note(_label(t, r"^\s*date\s*:\s*(.+)$"), "date", notes),
-        due_date=_date_with_note(_label(t, r"^\s*due\s*date\s*:\s*(.+)$"), "due_date", notes),
+        invoice_date=_date_with_note(
+            _label(t, r"^\s*date\s*:\s*(.+)$") or _label(t, r"(?<!due )\bdate\s*:\s*(\d[\w/-]+)"),
+            "date",
+            notes,
+        ),
+        due_date=_date_with_note(
+            _label(t, r"^\s*due(?:\s*date)?\s*:\s*(.+?)(?=\s+\w+\s*:|$)")
+            or _label(t, r"\bdue\s*:\s*(\d[\w/-]+)"),
+            "due_date",
+            notes,
+        ),
         currency="EUR" if re.search(r"\bEUR\b|€", t) else "USD",
         line_items=items,
         charges=charges,
@@ -238,6 +250,17 @@ def extract_labelled(doc: RawDocument) -> ExtractionResult:
         reasons.append("no recognizable item lines")
     if inv.total is None:
         reasons.append("no 'Total:' label found")
+    # Self-check: an extractor that misses lines must not look confident.
+    if items and inv.subtotal is not None and all(i.line_total or i.unit_price for i in items):
+        got = sum(
+            i.line_total if i.line_total is not None else i.quantity * (i.unit_price or 0)
+            for i in items
+        )
+        if abs(got - inv.subtotal) > 0.01:
+            reasons.append(
+                f"extracted lines sum to {got:,.2f} but the stated subtotal is "
+                f"{inv.subtotal:,.2f} (items probably missed)"
+            )
     if reasons:
         return ExtractionResult(inv if (vendor or items) else None, True, "label_fallback", reasons)
     return ExtractionResult(inv, False, "label_fallback")

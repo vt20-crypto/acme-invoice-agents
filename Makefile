@@ -1,4 +1,4 @@
-.PHONY: install test lint run reset
+.PHONY: install test lint run reset ui
 
 install:
 	uv sync
@@ -14,3 +14,6 @@ run:
 
 reset:
 	uv run python main.py reset
+
+ui:
+	uv run streamlit run app/streamlit_app.py

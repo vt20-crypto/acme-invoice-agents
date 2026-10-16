@@ -31,6 +31,17 @@ Order is defined: directories as given, then files within each sorted by file na
 locale ordering may differ). A file that looks like a revision but has no original in the ledger
 logs a warning. `--out` writes one JSON line per document (overwritten each run).
 
+## Web UI
+
+```bash
+make ui     # streamlit run app/streamlit_app.py
+```
+
+Tabs: Process (one invoice with a step-by-step trace and LLM provenance labels), Batch (all samples
+in the defined order) and Ledger & review queue (HOLD items with reasons; a reviewer can approve or
+reject with a note). Approving a HOLD still goes through the code payment guard (idempotency key,
+USD only), and a REJECT blocker cannot be overridden. Uploads go to a temp directory.
+
 ## LLM modes
 
 - `--llm fixture` (default): replays JSON fixtures from `fixtures/llm/`. Fixtures are hand-written

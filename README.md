@@ -20,11 +20,24 @@ Direct use:
 uv run python main.py --invoice_path=data/invoices/invoice_1001.txt [--llm fixture|none|live] [--db acme.db] [--fresh]
 ```
 
+## Batch mode
+
+```bash
+uv run python main.py --batch data/invoices data/synthetic --llm none --fresh --out results.jsonl
+```
+
+Order is defined: directories as given, then files within each sorted by file name with Python
+`sorted()` (byte order, so `invoice_1004.json` comes before `invoice_1004_revised.json`; shell or
+locale ordering may differ). A file that looks like a revision but has no original in the ledger
+logs a warning. `--out` writes one JSON line per document (overwritten each run).
+
 ## LLM modes
 
 - `--llm fixture` (default): replays JSON fixtures from `fixtures/llm/`. Fixtures are hand-written
   and labelled `authored`; they are not model output. A captured real response would be labelled
-  `recorded`. Only invoice_1001 has fixtures so far.
+  `recorded`. Authored fixtures exist only for a small demonstration set: invoice_1001, invoice_1002 (messy text),
+  invoice_1012.pdf (OCR noise) and the synthetic data/synthetic/invoice_9001.json (over $10K, runs
+  the critic). Any other text/PDF file in fixture mode HOLDs with "LLM unavailable".
 - `--llm none`: code-only paths, no network.
 - `--llm live`: calls the model configured in `.env` (see `.env.example`). Not yet exercised.
 

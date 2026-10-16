@@ -1,0 +1,6 @@
+# Expected outcomes in `--llm fixture` mode for the files that have authored fixtures.
+# Files without fixtures would HOLD with "LLM unavailable" (covered by a separate test).
+- {file: data/invoices/invoice_1001.txt, decision: APPROVE, codes: [], paid: 5000.0}
+- {file: data/invoices/invoice_1002.txt, decision: HOLD, codes: [stock_exceeded]}
+- {file: data/invoices/invoice_1012.pdf, decision: HOLD, codes: [risk_near_threshold, risk_score, risk_vendor_identity_change]}
+- {file: data/synthetic/invoice_9001.json, decision: APPROVE, codes: [], paid: 10750.0, critic: true}

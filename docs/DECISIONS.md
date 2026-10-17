@@ -161,7 +161,7 @@ the next line's word ("Date") as the number; it now stays on the line.
   now comes from the environment or `.env` only. Leak tests run the UI against a local stub that
   echoes the credential and assert it appears in no database file, cache file, log, export or
   page text.
-- Scope of "0 invalid payments": see #19 and the README Results section.
+- Scope of "0 invalid payments": see #19 and the [evaluation results](EVALUATION.md).
 
 ## 19. Authorization consistency is not policy safety
 

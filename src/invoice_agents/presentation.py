@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -397,3 +398,94 @@ def ledger_reason(row: dict[str, Any]) -> str:
 def ledger_details(row: dict[str, Any]) -> dict[str, Any]:
     """Stored line items and dates for a ledger row ({} for rows saved before details existed)."""
     return json.loads(row.get("details_json") or "{}")
+
+
+def format_local(ts: str | None, tz: tzinfo | None = None) -> str:
+    """ISO UTC timestamp as local time: 'Oct 17, 2026 \u00b7 12:16 AM'. ``tz`` defaults to the
+    machine's local zone. Unparseable or missing values show as an em dash."""
+    if not ts:
+        return "\u2014"
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        return "\u2014"
+    if dt.tzinfo is None:  # stored values are UTC; treat a naive one as UTC rather than guess
+        dt = dt.replace(tzinfo=UTC)
+    local = dt.astimezone(tz)
+    hour = local.strftime("%I").lstrip("0") or "12"
+    return f"{local:%b} {local.day}, {local:%Y} \u00b7 {hour}:{local:%M %p}"
+
+
+SORT_OPTIONS = [
+    "Newest first",
+    "Oldest first",
+    "Amount: high to low",
+    "Amount: low to high",
+    "Vendor A\u2013Z",
+]
+
+
+def sort_rows(rows: list[dict[str, Any]], how: str) -> list[dict[str, Any]]:
+    """Order ledger rows. Rows with no amount or vendor always go last."""
+    if how == "Oldest first":
+        return sorted(rows, key=lambda r: r["id"])
+    if how in ("Amount: high to low", "Amount: low to high"):
+        has = [r for r in rows if r["total"] is not None]
+        none = [r for r in rows if r["total"] is None]
+        return (
+            sorted(has, key=lambda r: (r["total"], -r["id"]), reverse=how.endswith("high to low"))
+            + none
+        )
+    if how == "Vendor A\u2013Z":
+        has = [r for r in rows if r["vendor"]]
+        none = [r for r in rows if not r["vendor"]]
+        return sorted(has, key=lambda r: (r["vendor"].casefold(), r["id"])) + none
+    return sorted(rows, key=lambda r: r["id"], reverse=True)
+
+
+def usd_bounds(rows: list[dict[str, Any]]) -> tuple[int, int] | None:
+    """Whole-dollar (min, max) over the USD totals in the ledger, or None if there are none."""
+    vals = [
+        r["total"] for r in rows if r["total"] is not None and (r["currency"] or "USD") == "USD"
+    ]
+    if not vals:
+        return None
+    return int(min(vals) // 1), int(-(-max(vals) // 1))
+
+
+def row_text(r: dict[str, Any]) -> str:
+    """The text a search box matches against: what the dashboard row shows."""
+    return " ".join(
+        [
+            display_number(r["invoice_number"]),
+            r["vendor"] or "",
+            decision_badge(r["decision"]),
+            money(r["total"], r["currency"] or "USD"),
+            ledger_reason(r),
+        ]
+    ).lower()
+
+
+def filter_rows(
+    rows: list[dict[str, Any]],
+    decision: str | None = None,
+    needle: str = "",
+    amount: tuple[int, int] | None = None,
+    bounds: tuple[int, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Combine the decision segment, the search text and the USD amount range. Rows in another
+    currency (or with no amount) are only kept while the range is untouched (== bounds)."""
+    narrowed = amount is not None and bounds is not None and tuple(amount) != tuple(bounds)
+    out = []
+    for r in rows:
+        if decision not in (None, "all") and r["decision"] != decision:
+            continue
+        if needle and needle.lower() not in row_text(r):
+            continue
+        if narrowed:
+            if r["total"] is None or (r["currency"] or "USD") != "USD":
+                continue
+            if not amount[0] <= r["total"] <= amount[1]:
+                continue
+        out.append(r)
+    return out

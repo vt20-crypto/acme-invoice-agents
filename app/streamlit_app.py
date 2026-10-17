@@ -14,20 +14,25 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from invoice_agents.batch import collect_files
+from invoice_agents.batch import collect_files, run_new, split_loaded
 from invoice_agents.db import Database
 from invoice_agents.graph import Context, process_invoice
 from invoice_agents.llm.client import LLMUnavailable, make_client
 from invoice_agents.presentation import (
+    SORT_OPTIONS,
     call_provenance,
     decision_badge,
     display_number,
     extracted_lines,
+    filter_rows,
+    format_local,
     ledger_details,
     ledger_reason,
     money,
     plain,
+    sort_rows,
     timeline,
+    usd_bounds,
 )
 from invoice_agents.review import (
     ReviewError,
@@ -196,21 +201,27 @@ def client_for(mode: str):
         return None
 
 
-def process_files(paths: list[Path], mode: str) -> list[dict] | None:
-    """Process files in the given order into the ledger. Returns the final states, or None if
-    the chosen engine is unavailable."""
+def process_files(
+    paths: list[Path], mode: str, only_new: bool = False
+) -> tuple[list[dict], int] | None:
+    """Process files in the given order into the ledger. Returns (final states, number skipped
+    because the exact file was already loaded), or None if the chosen engine is unavailable.
+    ``only_new`` is for the demo set; uploads always count as real submissions."""
     client = client_for(mode)
     if mode != "none" and client is None:
         return None
-    states = []
     db = Database(DB_PATH)
     try:
+        if only_new:
+            results, skipped = run_new(paths, db, client, mode)
+            return [state for state, _ in results], skipped
+        states = []
         for path in paths:
             ctx = Context(db=db, client=client, llm_mode=mode)
             states.append(process_invoice(str(path), ctx))
+        return states, 0
     finally:
         db.close()
-    return states
 
 
 def used_rules_only(state) -> bool:
@@ -230,10 +241,15 @@ def decision_card(rec: dict) -> str:
         if d == "DUPLICATE"
         else ""
     )
+    when = (
+        f'<p class="why">Processed {esc(format_local(rec["processed_at"]))}</p>'
+        if rec.get("processed_at")
+        else ""
+    )
     return (
         f'<div class="card {TONE[d]}"><div class="row">{pill(d, True)}'
         f'<span class="big">{esc(money(rec["total"], cur))}</span></div>'
-        f'<p class="who">{esc(who)}</p><p class="why">{esc(rec["reason"])}</p>{hint}</div>'
+        f'<p class="who">{esc(who)}</p><p class="why">{esc(rec["reason"])}</p>{hint}{when}</div>'
     )
 
 
@@ -307,9 +323,17 @@ def tab_process(mode: str) -> None:
             tmp.write_bytes(up.getvalue())  # temp dir only, never data/
             path = str(tmp)
     if st.button("Run", disabled=path is None, type="primary"):
-        states = process_files([Path(path)], mode)
-        if states:
-            st.session_state["last_result"] = (states[0], result_record(states[0], "ui"))
+        done = process_files([Path(path)], mode)
+        if done:
+            state = done[0][0]
+            rec = result_record(state, "ui")
+            db = Database(DB_PATH)
+            try:
+                row = db.get_ledger(state["ledger_id"])
+            finally:
+                db.close()
+            rec["processed_at"] = row["processed_at"] if row else None
+            st.session_state["last_result"] = (state, rec)
     last = st.session_state.get("last_result")
     if last:
         render_result(*last)
@@ -332,6 +356,11 @@ def flash(message: str) -> None:
 
 
 def add_invoices(rows: list[dict], mode: str) -> None:
+    db = Database(DB_PATH)
+    try:
+        pending, loaded = split_loaded(sample_files(), db)
+    finally:
+        db.close()
     with st.expander("Add invoices", expanded=not rows):
         if not rows:
             st.write(
@@ -345,6 +374,7 @@ def add_invoices(rows: list[dict], mode: str) -> None:
             accept_multiple_files=True,
             key=f"dash_upload_{gen}",
         )
+        st.caption("Files already processed will be marked as duplicates.")
         c1, c2 = st.columns(2)
         label = f"Process {len(ups)} uploaded invoice{'s' if len(ups) != 1 else ''}"
         if c1.button(label if ups else "Process uploaded invoices", type="primary",
@@ -353,8 +383,9 @@ def add_invoices(rows: list[dict], mode: str) -> None:
             for up in ups:
                 (folder / Path(up.name).name).write_bytes(up.getvalue())  # temp dir only
             paths = sorted(folder.iterdir(), key=lambda p: p.name)
-            states = process_files(paths, mode)
-            if states is not None:
+            done = process_files(paths, mode)
+            if done is not None:
+                states = done[0]
                 st.session_state["upload_gen"] = gen + 1
                 rules = sum(used_rules_only(x) for x in states)
                 extra = (
@@ -363,15 +394,23 @@ def add_invoices(rows: list[dict], mode: str) -> None:
                     else ""
                 )
                 flash(f"Processed {len(states)} invoice{'s' if len(states) != 1 else ''}.{extra}")
-        if c2.button("Load sample invoices", use_container_width=True):
-            states = process_files(sample_files(), mode)
-            if states is not None:
-                flash(f"Processed {len(states)} sample invoices.")
-        if rows:
-            st.caption(
-                "Samples already in the ledger show up as duplicates. "
-                "Use Reset database in Settings to start over."
+        all_loaded = not pending
+        if c2.button("Load sample invoices", disabled=all_loaded, use_container_width=True):
+            done = process_files(sample_files(), mode, only_new=True)
+            if done is not None:
+                states, skipped = done
+                flash(
+                    f"Loaded {len(states)} new, skipped {skipped} already loaded."
+                    if skipped
+                    else f"Loaded {len(states)} sample invoices."
+                )
+        if all_loaded:
+            c2.caption(
+                f"All {len(loaded)} sample invoices are already loaded. "
+                "Use Reset database in Settings to reload."
             )
+        elif loaded:
+            c2.caption(f"{len(loaded)} of {len(loaded) + len(pending)} samples are already loaded.")
 
 
 def tab_dashboard(mode: str) -> None:
@@ -406,8 +445,7 @@ def tab_dashboard(mode: str) -> None:
 
     counts = {"all": len(rows)} | {k: count(k) for k, _ in SEGMENTS[1:]}
     names = dict(SEGMENTS)
-    f1, f2 = st.columns([4, 2], vertical_alignment="bottom")
-    chosen = f1.segmented_control(
+    chosen = st.segmented_control(
         "Show",
         [k for k, _ in SEGMENTS],
         format_func=lambda k: f"{names[k]} ({counts[k]})",
@@ -415,24 +453,42 @@ def tab_dashboard(mode: str) -> None:
         selection_mode="single",
         key="dash_filter",
     )
-    needle = f2.text_input("Search", placeholder="Search vendor, invoice or reason").strip().lower()
-    table = []
-    for r in rows:
-        line = {
+    bounds = usd_bounds(rows)
+    f1, f2, f3 = st.columns([3, 3, 2], vertical_alignment="bottom")
+    needle = f1.text_input("Search", placeholder="Search vendor, invoice or reason").strip()
+    amount = bounds
+    if bounds and bounds[0] < bounds[1]:
+        with f2:
+            amount = st.slider(
+                "Amount (USD)",
+                bounds[0],
+                bounds[1],
+                bounds,
+                step=1,
+                format="%d",
+                key="dash_amount",
+            )
+    how = f3.selectbox("Sort by", SORT_OPTIONS, key="dash_sort")
+    shown = sort_rows(filter_rows(rows, chosen, needle, amount, bounds), how)
+    st.caption(f"Showing {len(shown)} of {len(rows)} invoices")
+    table = [
+        {
             "Invoice": display_number(r["invoice_number"]),
             "Vendor": r["vendor"] or "—",
             "Decision": decision_badge(r["decision"]),
             "Total": money(r["total"], r["currency"] or "USD"),
             "Reason": ledger_reason(r),
+            "Processed": format_local(r["processed_at"]),
         }
-        if chosen in (None, "all", r["decision"]) and needle in " ".join(line.values()).lower():
-            table.append(line)
+        for r in shown
+    ]
     if table:
         st.markdown(
-            html_table(table, nowrap=("Invoice", "Decision", "Total")), unsafe_allow_html=True
+            html_table(table, nowrap=("Invoice", "Decision", "Total", "Processed")),
+            unsafe_allow_html=True,
         )
     else:
-        st.caption("No invoices match this filter.")
+        st.caption("No invoices match these filters.")
 
 
 # ---------------------------------------------------------------------------- review queue
@@ -493,7 +549,8 @@ def review_card(r: dict) -> None:
             f'<div class="row"><b>{esc(vendor)} · {esc(display_number(r["invoice_number"]))}</b>'
             f'<span class="right"><span class="big">{esc(amount)}</span>{pill("HOLD")}</span></div>'
             f'<p class="who" style="font-weight:400">{esc("; ".join(plain(f) for f in reasons))}</p>'
-            f'<p class="why" style="margin-bottom:.6rem"><b>Suggested:</b> {esc(suggestion(codes))}</p>',
+            f'<p class="why"><b>Suggested:</b> {esc(suggestion(codes))}</p>'
+            f'<p class="why" style="margin-bottom:.6rem">Received {esc(format_local(r["processed_at"]))}</p>',
             unsafe_allow_html=True,
         )
         with st.expander("Details"):
@@ -553,7 +610,7 @@ def recently_reviewed(db: Database) -> None:
         for rv in reversed(done):
             r = ledger[rv["ledger_id"]]
             who = f"{r['vendor'] or 'Unknown vendor'} · {display_number(r['invoice_number'])}"
-            when = str(rv["ts"])[:16].replace("T", " ") + " UTC"
+            when = "Reviewed " + format_local(rv["ts"])
             st.markdown(
                 md(
                     f"**{who}** · {money(r['total'], r['currency'] or 'USD')} · "

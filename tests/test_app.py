@@ -27,6 +27,7 @@ def test_app_has_three_tabs_and_processes_a_sample_in_rules_only_mode(tmp_path, 
     click(at, "Run")
     html_blocks = " ".join(m.value for m in at.markdown)
     assert "Approved" in html_blocks and "&#36;5,000.00" in html_blocks
+    assert "Processed " in html_blocks and " \u00b7 " in html_blocks  # local-time stamp on the card
 
 
 def test_settings_offer_engines_and_hide_live_without_a_key(tmp_path, monkeypatch):

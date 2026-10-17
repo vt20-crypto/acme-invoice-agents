@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,35 @@ def run_batch(
         ctx = Context(db=db, client=client, llm_mode=llm_mode, payer=payer)
         results.append((process_invoice(str(p), ctx), ctx))
     return results
+
+
+def file_fingerprint(path: str | Path) -> str:
+    """Same value the parsers store as the document fingerprint (sha256 of the file bytes)."""
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def split_loaded(paths: Iterable[Path], db: Database) -> tuple[list[Path], list[Path]]:
+    """(new, already loaded): files whose exact bytes are already in the ledger are not a new
+    business event. Decided up front, so identical files inside one batch are all processed."""
+    new: list[Path] = []
+    seen: list[Path] = []
+    for p in paths:
+        (seen if db.find_by_fingerprint(file_fingerprint(p)) else new).append(p)
+    return new, seen
+
+
+def run_new(
+    paths: Iterable[Path],
+    db: Database,
+    client: LLMClient | None,
+    llm_mode: str,
+    *,
+    payer: Any = None,
+) -> tuple[list[tuple[PipelineState, Context]], int]:
+    """Process only files not yet in the ledger. Returns (results, number skipped). Business
+    duplicates between different files are still recorded as DUPLICATE by the pipeline."""
+    new, seen = split_loaded(paths, db)
+    return run_batch(new, db, client, llm_mode, payer=payer), len(seen)
 
 
 def summary_table(records: list[dict[str, Any]]) -> str:

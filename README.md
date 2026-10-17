@@ -1,67 +1,131 @@
 # Acme Invoice Agents
 
-A multi-agent prototype that takes a vendor invoice (TXT, PDF, CSV, JSON or XML) from arrival
-to a decision: extract the fields, validate them against an inventory database, run a VP-style
-approval with a critique loop, and make a guarded mock payment. Payment authority lives in code,
-never in a model.
+A multi-agent prototype for the Galatiq invoice-processing case. It takes a vendor invoice (PDF, TXT,
+CSV, JSON or XML), extracts the fields, validates them against a SQLite inventory, runs a VP-style
+approval with a critique loop, and makes a mock payment. The model never has payment authority:
+code decides, and code pays once per invoice.
 
-## How to run
-
-```bash
-make install
-make test
-make run          # processes data/invoices/invoice_1001.txt from a fresh database
-make reset        # wipe and reseed the local database
-```
-
-Direct use:
+## Quick start
 
 ```bash
-uv run python main.py --invoice_path=data/invoices/invoice_1001.txt [--llm fixture|none|live] [--db acme.db] [--fresh]
+make install                      # uv sync
+make test                         # no API key needed: tests replay recorded responses
+make run                          # invoice_1001, code-only, fresh database
+make ui                           # Streamlit app (4 tabs)
+uv run python main.py --invoice_path=data/invoices/invoice_1002.txt --llm cache --fresh
+uv run python main.py --batch data/invoices data/synthetic --llm cache --fresh
 ```
 
-## Batch mode
+CLI: `--invoice_path`, `--batch DIR...`, `--fresh`, `--db`, `--cache`, and
+`--llm live|cache|none`. Structured JSON logs go to stderr; the readable summary to stdout.
+`python main.py reset` wipes and reseeds the database.
 
-```bash
-uv run python main.py --batch data/invoices data/synthetic --llm none --fresh --out results.jsonl
+## Architecture
+
+LangGraph pipeline (`src/invoice_agents/graph.py`):
+
+```
+ingest -> resolve items -> validate (+ risk rules) -> approve (VP + critic) -> pay -> ledger
+              |                  |                        |
+              +--------- early exit to the ledger on: extraction failed, duplicate, any blocker
 ```
 
-Order is defined: directories as given, then files within each sorted by file name with Python
-`sorted()` (byte order, so `invoice_1004.json` comes before `invoice_1004_revised.json`; shell or
-locale ordering may differ). A file that looks like a revision but has no original in the ledger
-logs a warning. `--out` writes one JSON line per document (overwritten each run).
+| Agent | Job | LLM? |
+|---|---|---|
+| Ingestion | Parse the file; structured formats are mapped by code; text and PDF go to Grok (structured output, schema validation, up to 2 retries with the exact error, then a normalized grounding check against the source) | text/PDF only |
+| Item resolution | Code normalization first; names it cannot resolve go to Grok with a `search_inventory` tool (real tool calling) | only for the remainder |
+| Validation | Pure code: required fields, arithmetic including shipping and fees, item exists, stock aggregated per item, duplicate vs revision, currency, risk rules | no |
+| Approval | VP agent drafts a decision with reasons that cite a fact sheet; totals over $10,000 also go through a critic; at most 1 revision. Final = strictest of code and model, so a model can never approve a blocked invoice | yes |
+| Payment | Code only: idempotency key (vendor + invoice number), USD only, `mock_payment` called once | no |
 
-## Web UI
+Rejections get a plain template message for the vendor (shown, not sent). Held invoices go to a
+human review queue; approving one still passes the same payment guard.
 
-```bash
-make ui     # streamlit run app/streamlit_app.py
-```
+## How the brief is met
 
-Tabs: Process (one invoice with a step-by-step trace and LLM provenance labels), Batch (all samples
-in the defined order) and Ledger & review queue (HOLD items with reasons; a reviewer can approve or
-reject with a note). Approving a HOLD still goes through the code payment guard (idempotency key,
-USD only), and a REJECT blocker cannot be overridden. Uploads go to a temp directory.
+| Requirement | Where |
+|---|---|
+| Ingestion from messy PDF/text | Grok structured extraction with retry and grounding check (`ingestion/`) |
+| Validation against SQLite | `db.py`, `validation.py` (stock, unknown items, arithmetic, duplicates) |
+| VP approval with scrutiny over $10K and a critique loop | `approval.py` (critic over $10K, 1 revision, code gate) |
+| Payment or logged rejection | `payments.py`; every decision is written to the ledger and audit trail |
+| Grok, function calling, structured outputs, self-correction | Responses API, `search_inventory` tool, Pydantic schemas, retry loops |
+| Multi-agent orchestration | LangGraph |
+| `python main.py --invoice_path=...` with logs and results | `cli.py` |
+| Tests and error handling | `tests/` (118 tests, no network) |
 
-## LLM modes
+## Results
 
-- `--llm fixture` (default): replays JSON fixtures from `fixtures/llm/`. Fixtures are hand-written
-  and labelled `authored`; they are not model output. A captured real response would be labelled
-  `recorded`. Authored fixtures exist only for a small demonstration set: invoice_1001, invoice_1002 (messy text),
-  invoice_1012.pdf (OCR noise) and the synthetic data/synthetic/invoice_9001.json (over $10K, runs
-  the critic). Any other text/PDF file in fixture mode HOLDs with "LLM unavailable".
-- `--llm none`: code-only paths, no network.
-- `--llm live`: calls the model configured in `.env` (see `.env.example`). Not yet exercised.
+Recorded Grok responses (model `grok-4.3`, recorded 2026-10-17) replayed in `cache` mode over all
+22 documents: the 20 samples plus two synthetic cases (`invoice_9001` over $10K that should
+approve through the VP and critic; `invoice_9002` with an injected instruction). Expectations are
+in `tests/regression/expected.yaml`, written before the first live run.
 
-Every LLM result is logged with its provenance (`live`, `authored` or `recorded`).
+| File | Expected | Actual | Why (plain language) |
+|---|---|---|---|
+| invoice_1001.txt | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_1002.txt | HOLD | HOLD ✓ | Ordered 20 GadgetX, only 5 in stock. Not paid. |
+| invoice_1003.txt | REJECT | REJECT ✓ | Risk is high: pressure or urgency wording, an invalid due date (+2 more). Not paid. |
+| invoice_1004.json | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_1004_revised.json | HOLD | HOLD ✓ | Revision of invoice_1004.json: total changed from $1,890.00 to $5,940.00 (+4,050.00); the original was already paid. Not paid. |
+| invoice_1005.json | HOLD | HOLD ✓ | Ordered 8 GadgetX, only 5 in stock. Not paid. |
+| invoice_1006.csv | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_1007.csv | REJECT | REJECT ✓ | Invoice states $15,525.00 but lines, charges and tax add up to $15,635.00 (+2 more). Not paid. |
+| invoice_1008.txt | REJECT | REJECT ✓ | None of the items exist in inventory: SuperGizmo, MegaSprocket. Not paid. |
+| invoice_1009.json | REJECT | REJECT ✓ | The vendor name is missing (+3 more). Not paid. |
+| invoice_1010.txt | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_1011.pdf | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_1011.txt | DUPLICATE | DUPLICATE ✓ | Same invoice already processed (invoice_1011.pdf, APPROVE); nothing to do |
+| invoice_1012.pdf | HOLD | HOLD ✓ | Risk is medium: the vendor name changed, total just under $10,000. Not paid. |
+| invoice_1012.txt | DUPLICATE | DUPLICATE ✓ | Same invoice already processed (invoice_1012.pdf, HOLD); nothing to do |
+| invoice_1013.json | REJECT | REJECT ✓ | Invoice states $22,562.80 but lines, charges and tax add up to $22,512.80 (+3 more). Not paid. |
+| invoice_1013.pdf | DUPLICATE | DUPLICATE ✓ | Same invoice already processed (invoice_1013.json, REJECT); nothing to do |
+| invoice_1014.xml | HOLD | HOLD ✓ | Invoice is in EUR; the payment rail is USD-only, so it is held (no currency conversion). Not paid. |
+| invoice_1015.csv | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_1016.json | HOLD | HOLD ✓ | Not found in inventory: WidgetC. Not paid. |
+| invoice_9001.json | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
+| invoice_9002.txt | REJECT | REJECT ✓ | Risk is high: instructions aimed at the system hidden in the invoice. Not paid. |
 
-## Fixtures and the manifest
+**22/22 match**
 
-Fixtures carry hashes of the prompt, schema, input and settings they were made for; a mismatch is a
-`fixture_stale` HOLD, never silently used. `fixtures/manifest.json` lists the required fixtures and
-`tests/test_manifest.py` fails if any is missing or stale. After changing a prompt or schema run
-`python -m invoice_agents.record stamp` (authored fixtures) or, with a key,
-`python -m invoice_agents.record live` (recorded fixtures; not yet exercised).
+The regression test (`tests/regression/test_regression.py`) asserts every decision, that nothing
+but APPROVE is paid, and that no idempotency key is paid twice. It fails if a cached response is
+missing. About 39k input and 20k output tokens were spent building the cache and prompts, roughly
+$0.10 by the grok-4.3 price list.
 
-## Status
+## LLM provenance
 
-Work in progress. This is the first vertical slice.
+- `live`: a real Grok call; the response is written to `cache/llm/<step>/<document>-<request-hash>.json`.
+- `cache`: replays those recorded responses only. A missing entry is a HOLD marked as a system
+  issue, never a vendor defect. The request hash covers the exact messages, schema, tools, model
+  and settings, so changing a prompt means re-recording (`--llm live`).
+- `none`: code only (parsers, rules, label-based extraction); anything needing a model holds.
+
+Keys come from `.env` (see `.env.example`) and are never logged or cached.
+
+## Key decisions
+
+See [docs/DECISIONS.md](docs/DECISIONS.md): Responses API choice, the cache design, why the address
+denylist was removed, risk levels, the two arithmetic rejects (1007, 1013), tiered item
+resolution, due dates judged against the invoice date, the USD-only rail, duplicate vs revision.
+
+## Assumptions
+
+- The brief validates against **stock on hand**. Real accounts payable does a three-way match
+  against the purchase order and goods receipt. We implement what was asked and do not decrement
+  stock after payment.
+- The brief's `grok-3` has been retired; the project uses `grok-4.3`, set in `.env`.
+- `mock_payment` has no currency, so it is a USD rail; other currencies hold.
+- "No internet" is read as: the LLM API is the only network call. Everything else is local.
+
+## Next steps (cut from this MVP)
+
+- Checkpoints, resume, retry-failed and a run journal for large batches
+- A weighted risk rubric and richer fraud signals (split invoices, near-duplicates, price deviation)
+- A separate LLM risk reviewer
+- A Communication agent that drafts and sends vendor messages
+- FX conversion for non-USD invoices
+- A larger synthetic test suite
+- Fixture manifests and stamping tooling
+- mypy, pip-audit, coverage gates and branch protection
+- Knowledge-transfer and operating-model documents

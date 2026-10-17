@@ -71,3 +71,17 @@ guard (idempotency key, USD only).
 ## 12. Baseline
 `tests/regression/expected.yaml` was written before the first live run and records the documented
 decision for each of the 22 documents. A live result that differs is reported, not edited away.
+
+## 13. What the first live run changed
+The first full live batch matched 19 of 22 expectations. The three differences were fixed in code
+and prompts, not in `expected.yaml`:
+- invoice_1008: the grounding check could not see quantities written like "x12" (a digit glued to a
+  letter), so a correct extraction was rejected. The number matcher now accepts them.
+- invoice_1002: the model left the total null because the source labels it "Amt:". The extraction
+  prompt now says labels may be abbreviated or misspelled and a single stated amount is the total.
+- invoice_9001: the critic asked for rewording twice, so the one allowed revision ran out and the
+  invoice held. The critic prompt now asks for a revision only for substantive problems, and the
+  fact sheet gives the risk level and the over-$10,000 policy as citable facts.
+
+Those prompt changes meant discarding the first cache and re-recording once. The second live batch
+matched 22 of 22. Total live spend for the smoke test and both batches is about $0.10.

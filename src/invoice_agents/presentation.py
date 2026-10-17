@@ -134,6 +134,13 @@ def display_path(path: str | Path) -> str:
     return str(p)
 
 
+RULE_WORDS = {
+    "prompt_injection": "instructions aimed at the system hidden in the invoice",
+    "pressure_language": "pressure or urgency wording",
+    "vendor_identity_change": "the vendor name changed",
+    "invalid_due_date": "an invalid due date",
+    "near_threshold": "total just under $10,000",
+}
 _RISK_TEXT = {
     "risk_pressure_language": "Contains urgency or pressure language",
     "risk_vendor_identity_change": 'The vendor name appears to have changed ("formerly")',
@@ -214,7 +221,8 @@ def plain(f: Finding | dict[str, Any]) -> str:
         if c == "risk_invalid_due_date":
             return f"Due date looks invalid ({x['evidence']})"
         if c == "risk_level":
-            return f"Overall risk level is {x['level']}"
+            words = ", ".join(RULE_WORDS.get(r, r) for r in x["rules"])
+            return f"Risk is {x['level']}: {words}"
     except (KeyError, TypeError):
         return d["message"]
     return _RISK_TEXT.get(c) or _STATIC.get(c) or d["message"]

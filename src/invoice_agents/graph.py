@@ -20,11 +20,19 @@ from .llm.client import LLMClient
 from .logs import jlog
 from .models import Decision, Finding, Invoice, Reason
 from .payments import pay_invoice
+from .presentation import finding_line, money
 from .resolve import ResolveOutcome, resolve_items
 from .risk import assess
 from .validation import ValidationResult, number_key, validate, vendor_key
 
 REVISION_NAME = re.compile(r"revis|amend|correct", re.I)
+
+
+TIER_TEXT = {
+    "code": "exact match after normalization",
+    "llm": "via inventory search",
+    "unresolved": "no match found",
+}
 
 
 @dataclass
@@ -86,17 +94,19 @@ def build_graph(ctx: Context):
         lines = [f"format={doc.format}  method={ex.method}  fingerprint={doc.key}"]
         if ex.provenance:
             lines.append(f"LLM provenance: {ex.provenance}  (calls: {ex.attempts})")
+        cur = inv.currency if inv else "USD"
         if inv:
             lines += [
                 f"vendor={inv.vendor!r}  invoice_number={inv.invoice_number!r}  "
                 f"date={inv.invoice_date}  due={inv.due_date}  currency={inv.currency}",
                 *(
-                    f"item: {li.raw_name!r} qty={li.quantity:g} unit_price={li.unit_price}"
-                    f" line_total={li.line_total}"
+                    f"item: {li.raw_name!r}  qty {li.quantity:g}  unit {money(li.unit_price, cur)}"
+                    f"  line total {money(li.line_total, cur)}"
                     for li in inv.line_items
                 ),
-                *(f"charge: {c.kind} {c.amount:,.2f}" for c in inv.charges),
-                f"subtotal={inv.subtotal}  tax={inv.tax}  total={inv.total}",
+                *(f"charge: {c.kind} {money(c.amount, cur)}" for c in inv.charges),
+                f"subtotal {money(inv.subtotal, cur)}  tax {money(inv.tax, cur)}"
+                f"  total {money(inv.total, cur)}",
             ]
         if ex.uncertain:
             lines.append("EXTRACTION UNCERTAIN: " + "; ".join(ex.reasons))
@@ -130,7 +140,7 @@ def build_graph(ctx: Context):
         for t in out.tool_trace:
             lines.append(f"tool call {t['tool']}({t['arguments']}) -> {t['result']}")
         for li, sku, tier in zip(inv.line_items, out.proposed, out.tiers, strict=True):
-            lines.append(f"{li.raw_name!r} -> {sku}  [tier={tier}]")
+            lines.append(f"{li.raw_name!r} \u2192 {sku or 'not resolved'}  ({TIER_TEXT[tier]})")
         if out.error:
             lines.append(f"LLM resolution failed; unresolved lines stay unknown: {out.error}")
             findings.append(
@@ -197,7 +207,7 @@ def build_graph(ctx: Context):
             res.facts["risk.score"] = str(risk.score)
             blockers = [x.code for x in res.findings if x.severity in ("reject", "hold")]
             res.facts["check.blockers"] = ", ".join(blockers) if blockers else "none"
-        lines = [f"[{f.severity}] {f.code}: {f.message}" for f in res.findings] or ["no findings"]
+        lines = [f"[{f.severity}] {finding_line(f)}" for f in res.findings] or ["no findings"]
         n_llm = state["resolve"].tiers.count("llm")
         if n_llm:
             lines.insert(0, f"re-verified {n_llm} LLM-proposed SKU(s) exactly against inventory")
@@ -218,7 +228,7 @@ def build_graph(ctx: Context):
         lines += [f"reason: {r.claim} [{r.fact_ref}]" for r in out.reasons]
         if out.critic_ran:
             lines.append(f"critic pass ran (revisions: {out.revisions})")
-        lines += [f"[{f.severity}] {f.code}: {f.message}" for f in out.findings]
+        lines += [f"[{f.severity}] {finding_line(f)}" for f in out.findings]
         for c in out.llm_calls:
             lines.append(f"LLM {c['agent']}/{c['step']}: provenance={c['provenance']}")
         audit(
@@ -251,11 +261,17 @@ def build_graph(ctx: Context):
             "payment": {
                 "status": res.status,
                 "detail": res.detail,
+                "output": res.output,
                 "amount": inv.total,
+                "currency": inv.currency,
                 "vendor": inv.vendor,
             }
         }
-        lines = [f"payment {res.status}: {res.detail}"]
+        cur = inv.currency
+        lines = [
+            f"payment {res.status}: {money(inv.total, cur)} to {inv.vendor}"
+            + (f"  (mock_payment printed: {res.output!r})" if res.output else "")
+        ]
         if res.status == "duplicate":
             update["decision"] = Decision.DUPLICATE
         elif res.status in ("refused", "failed"):
@@ -293,9 +309,7 @@ def build_graph(ctx: Context):
         )
         lines = [f"final decision={decision.value}  ledger id={ledger_id}"]
         if decision is not Decision.APPROVE:
-            lines += [
-                f"[{f.severity}] {f.code}: {f.message}" for f in findings if f.severity != "note"
-            ]
+            lines += [f"[{f.severity}] {finding_line(f)}" for f in findings if f.severity != "note"]
         audit(state, "finalize", {"decision": decision.value, "ledger_id": ledger_id})
         return {"decision": decision, "ledger_id": ledger_id, "steps": _step("finalize", lines)}
 

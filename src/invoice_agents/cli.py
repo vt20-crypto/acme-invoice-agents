@@ -13,7 +13,7 @@ from .ingestion.parsers import parse_file
 from .llm.client import FixtureClient, LiveClient, LLMClient, LLMUnavailable
 from .logs import jlog
 from .models import Decision
-from .presentation import decision_label, split_reasons
+from .presentation import decision_label, display_path, money, split_reasons
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,8 +36,17 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def render(state: PipelineState, ctx: Context, prior: dict | None) -> str:
-    out = [f"=== Invoice: {state['path']} ===", f"run={ctx.run_id}  llm mode={ctx.llm_mode}"]
+def render(
+    state: PipelineState,
+    ctx: Context,
+    prior: dict | None,
+    verbose: bool = False,
+    db_path: str = "",
+) -> str:
+    out = [
+        f"=== Invoice: {display_path(state['path'])} ===",
+        f"run={ctx.run_id}  llm mode={ctx.llm_mode}",
+    ]
     if prior:
         out.append(
             f"NOTE: this exact file was already processed (ledger #{prior['id']}, "
@@ -51,7 +60,14 @@ def render(state: PipelineState, ctx: Context, prior: dict | None) -> str:
     out.append(f"Decision: {decision.value}")
     pay = state.get("payment")
     if pay:
-        out.append(f"Payment: {pay['status']} ({pay['amount']} to {pay['vendor']})")
+        amount = money(pay["amount"], pay.get("currency", "USD"))
+        if pay["status"] == "paid":
+            line = f"Payment: paid {amount} to {pay['vendor']}"
+            if pay.get("output"):
+                line += f"  (mock_payment output: {pay['output']})"
+            out.append(line)
+        else:
+            out.append(f"Payment: not made ({pay['status']}: {pay['detail']})")
     elif decision is Decision.DUPLICATE:
         out.append(f"Payment: none (duplicate of ledger #{state.get('duplicate_of')})")
     else:
@@ -77,6 +93,13 @@ def render(state: PipelineState, ctx: Context, prior: dict | None) -> str:
         ]
     else:
         out.append("LLM provenance: none (code-only run)")
+    if verbose:
+        out += [
+            "\n--- Developer details ---",
+            f"absolute path: {Path(state['path']).resolve()}",
+            f"database: {Path(db_path).resolve() if db_path else 'n/a'}",
+            f"document fingerprint: {state['doc'].fingerprint}",
+        ]
     return "\n".join(out)
 
 
@@ -119,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
             jlog("run_end", run_id=ctx.run_id, decision=state["decision"].value)
             records.append(result_record(state, ctx.run_id))
             if not args.batch or args.verbose:
-                print(render(state, ctx, prior))
+                print(render(state, ctx, prior, args.verbose, args.db))
         if args.batch:
             print(summary_table(records))
         if args.out:

@@ -10,7 +10,7 @@ from typing import Any
 from .db import Database
 from .graph import Context, PipelineState, process_invoice
 from .llm.client import LLMClient
-from .presentation import cause, decision_label, key_codes
+from .presentation import cause, decision_label, display_path, key_codes
 
 SUPPORTED = {".txt", ".pdf", ".csv", ".json", ".xml"}
 
@@ -30,7 +30,7 @@ def result_record(state: PipelineState, run_id: str) -> dict[str, Any]:
     inv = state.get("invoice")
     findings = state.get("findings", [])
     return {
-        "file": state["path"],
+        "file": display_path(state["path"]),
         "run_id": run_id,
         "decision": state["decision"].value,
         "vendor": inv.vendor if inv else None,

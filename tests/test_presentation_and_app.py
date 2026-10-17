@@ -33,7 +33,7 @@ def test_group_findings_orders_by_severity_with_evidence():
         Finding(code="b", severity="reject", message="r", evidence="why"),
     ]
     g = group_findings(fs)
-    assert g["reject"] == ["r (why)"] and g["note"] == ["n"] and g["hold"] == []
+    assert g["reject"] == ["r [b]"] and g["note"] == ["n [a]"] and g["hold"] == []
 
 
 def test_paid_text_and_key_codes():
@@ -90,8 +90,11 @@ def test_cause_and_label_separate_system_issues_from_business_reasons():
         "HOLD – system issue: no fixture for this document or step"
     )
     assert split_reasons([sys_f, biz_f]) == {
-        "business": ["stock_exceeded: too many"],
-        "execution": ["fixture_missing: no fixture"],
+        "business": ["too many [stock_exceeded]"],
+        "execution": [
+            "No recorded or authored LLM fixture exists for this document and step"
+            " [fixture_missing]"
+        ],
     }
 
 

@@ -298,20 +298,20 @@ class FixtureClient(LLMClient):
         if not key:
             raise LLMUnavailable(f"{agent}: no fixture key given")
         path = self.root / agent / f"{key}{suffix}.json"
+        rel = f"{agent}/{key}{suffix}.json"
         if not path.exists():
-            raise FixtureMissing(f"no fixture for {agent} at {path}")
+            raise FixtureMissing(f"no fixture for {rel}")
         try:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as exc:
-            raise FixtureError(f"{path} is not valid JSON: {exc}") from exc
+            raise FixtureError(f"{rel} is not valid JSON: {exc}") from exc
         prov = data.get("provenance") if isinstance(data, dict) else None
         if prov not in VALID_FIXTURE_PROVENANCE:
             raise FixtureError(
-                f"{path} refused: missing or invalid 'provenance' (need one of "
+                f"{rel} refused: missing or invalid 'provenance' (need one of "
                 f"{sorted(VALID_FIXTURE_PROVENANCE)}, got {prov!r})"
             )
         current = compat_meta(agent, messages, schema_model, prompt, "authored")
-        rel = f"{agent}/{key}{suffix}.json"
         if self.stamp:
             meta = {
                 **current,

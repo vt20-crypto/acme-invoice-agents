@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -67,6 +67,7 @@ class Finding(BaseModel):
     evidence: str = ""
     kind: Literal["business", "execution"] = "business"
     stage: str = ""  # extraction | resolve | approval | payment (set on execution findings)
+    data: dict[str, Any] = Field(default_factory=dict)  # facts for plain-language rendering
 
     @model_validator(mode="after")
     def _classify(self) -> Finding:

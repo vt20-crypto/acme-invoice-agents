@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .config import PAYABLE_CURRENCY, TOLERANCE
@@ -78,9 +79,23 @@ def validate(
     res = ValidationResult()
     f = res.findings
 
-    def add(code: str, severity: Any, message: str, evidence: str = "", stage: str = "") -> None:
+    def add(
+        code: str,
+        severity: Any,
+        message: str,
+        evidence: str = "",
+        stage: str = "",
+        **data: Any,
+    ) -> None:
         f.append(
-            Finding(code=code, severity=severity, message=message, evidence=evidence, stage=stage)
+            Finding(
+                code=code,
+                severity=severity,
+                message=message,
+                evidence=evidence,
+                stage=stage,
+                data={"currency": invoice.currency, **data},
+            )
         )
 
     # 1. Re-check every proposed SKU exactly against the DB; an unknown SKU is simply unknown.
@@ -92,6 +107,8 @@ def validate(
                 "note",
                 f"Proposed SKU {sku!r} is not in inventory; ignored.",
                 invoice.line_items[i].raw_name,
+                sku=sku,
+                item=invoice.line_items[i].raw_name,
             )
         res.resolved.append(sku if item else None)
     res.content_hash = content_hash(invoice)
@@ -107,7 +124,10 @@ def validate(
                     "duplicate",
                     "note",
                     f"Same vendor, invoice number and content as ledger #{orig['id']} "
-                    f"({orig['source_file']}, {orig['decision']}).",
+                    f"({Path(orig['source_file']).name}, {orig['decision']}).",
+                    original_id=orig["id"],
+                    original_file=Path(orig["source_file"]).name,
+                    original_decision=orig["decision"],
                 )
                 res.facts["check.duplicate"] = f"duplicate of ledger #{orig['id']}"
                 return res
@@ -122,7 +142,13 @@ def validate(
                 "revision",
                 "hold",
                 f"Revision of already-processed invoice ledger #{orig['id']} "
-                f"({orig['source_file']}, {orig['decision']}).{delta}{paid}",
+                f"({Path(orig['source_file']).name}, {orig['decision']}).{delta}{paid}",
+                original_id=orig["id"],
+                original_file=Path(orig["source_file"]).name,
+                original_decision=orig["decision"],
+                original_total=orig["total"],
+                new_total=invoice.total,
+                paid=bool(paid),
             )
     res.facts["check.duplicate"] = (
         "no prior ledger entry"
@@ -144,6 +170,8 @@ def validate(
             "invalid_due_date",
             "hold",
             f"Due date {invoice.due_date} is before invoice date {invoice.invoice_date}.",
+            due=str(invoice.due_date),
+            invoice_date=str(invoice.invoice_date),
         )
 
     # 4. Quantities.
@@ -153,6 +181,8 @@ def validate(
                 "bad_quantity",
                 "reject",
                 f"Quantity {li.quantity:g} for {li.raw_name!r} is not positive.",
+                item=li.raw_name,
+                quantity=li.quantity,
             )
 
     # 5. Arithmetic.
@@ -172,6 +202,11 @@ def validate(
                     "reject",
                     f"{li.raw_name}: {li.quantity:g} x {li.unit_price:g} = {_money(expect)}, "
                     f"but line total is {_money(li.line_total)}.",
+                    item=li.raw_name,
+                    quantity=li.quantity,
+                    unit_price=li.unit_price,
+                    expected=expect,
+                    stated=li.line_total,
                 )
     charge_sum = sum(c.amount for c in invoice.charges)
     tax = invoice.tax or 0.0
@@ -184,6 +219,8 @@ def validate(
             "subtotal_mismatch",
             "reject",
             f"Subtotal {_money(invoice.subtotal)} != sum of lines {_money(line_sum)}.",
+            subtotal=invoice.subtotal,
+            lines=line_sum,
         )
     if invoice.total is not None and invoice.line_items:
         if unverifiable:
@@ -201,6 +238,11 @@ def validate(
                     "reject",
                     f"Total {_money(invoice.total)} != lines {_money(line_sum)} + charges "
                     f"{_money(charge_sum)} + tax {_money(tax)} = {_money(expected)}.",
+                    stated=invoice.total,
+                    expected=expected,
+                    lines=line_sum,
+                    charges=charge_sum,
+                    tax=tax,
                 )
             res.facts["validation.arithmetic"] = (
                 f"total {_money(invoice.total)} = lines {_money(line_sum)} + charges "
@@ -229,10 +271,15 @@ def validate(
                 "so they need mapping.",
                 ", ".join(unsearched),
                 stage="resolve",
+                items=unsearched,
             )
         if searched_unknown and len(unknown) == len(invoice.line_items):
             add(
-                "all_items_unknown", "reject", "No line item matches inventory.", ", ".join(unknown)
+                "all_items_unknown",
+                "reject",
+                "No line item matches inventory.",
+                ", ".join(unknown),
+                items=unknown,
             )
         elif searched_unknown:
             add(
@@ -240,6 +287,7 @@ def validate(
                 "hold",
                 "Some line items are not in inventory.",
                 ", ".join(searched_unknown),
+                items=searched_unknown,
             )
     res.facts["validation.items"] = (
         f"{len(invoice.line_items) - len(unknown)} of {len(invoice.line_items)} line items "
@@ -254,7 +302,12 @@ def validate(
         res.facts[f"stock.{sku}"] = f"needs {qty:g}, on hand {stock}"
         if qty > stock:
             add(
-                "stock_exceeded", "hold", f"{sku}: invoice needs {qty:g} but only {stock} in stock."
+                "stock_exceeded",
+                "hold",
+                f"{sku}: invoice needs {qty:g} but only {stock} in stock.",
+                sku=sku,
+                needed=qty,
+                stock=stock,
             )
 
     # 7. Currency.
@@ -263,6 +316,7 @@ def validate(
             "non_usd",
             "hold",
             f"Currency {invoice.currency} cannot be paid on the USD-only payment rail.",
+            total=invoice.total,
         )
 
     # 8. Facts for the approval agents.

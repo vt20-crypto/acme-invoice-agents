@@ -33,9 +33,17 @@ def test_1001_fixture_mode_approves_and_pays_5000(tmp_path, capsys):
     rc, out, err = run(tmp_path, capsys, "--fresh")
     assert rc == 0
     assert "Decision: APPROVE" in out
-    assert out.count("Paid 5000.0 to Widgets Inc.") == 1
+    assert out.startswith(
+        "=== Invoice:"
+    )  # mock_payment's print no longer leaks ahead of the summary
+    assert "Payment: paid $5,000.00 to Widgets Inc." in out
+    assert out.index("Paid 5000.0 to Widgets Inc.") > out.index(
+        "[5] pay"
+    )  # only as a captured note
     assert "extraction/initial: authored" in out and "vp_approval/draft: authored" in out
-    assert "[tier=code]" in out and "tool call" not in out  # code tier resolved both lines
+    assert (
+        "(exact match after normalization)" in out and "tool call" not in out
+    )  # code tier resolved both lines
     assert payments(tmp_path) == [(5000.0, "sent")]
     assert '"event": "run_end"' in err  # structured logs on stderr
 

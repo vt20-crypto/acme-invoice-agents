@@ -95,6 +95,7 @@ def assess(invoice: Invoice, text: str, *, known_vendor: bool = False) -> RiskRe
                     code=f"risk_{s.name}",
                     severity="note",
                     message=f"Risk signal {s.name} (+{s.weight}): {s.evidence}",
+                    data={"weight": s.weight, "evidence": s.evidence},
                 )
             )
     sev: Any
@@ -112,6 +113,7 @@ def assess(invoice: Invoice, text: str, *, known_vendor: bool = False) -> RiskRe
                 message=f"Risk score {res.score} ("
                 + ", ".join(f"{s.name}={s.weight}" for s in sigs if s.weight)
                 + ")",
+                data={"score": res.score, "signals": {s.name: s.weight for s in sigs if s.weight}},
             )
         )
     return res

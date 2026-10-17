@@ -80,10 +80,9 @@ currency is not USD (no FX, no one-click non-USD approval); any REJECT blocker e
 extraction/mapping system issue left fields unverified. Enforced in `review.py` (backend) and by
 disabling the button with the reason in the UI. Payment still goes through the guard.
 
-## 12. Differences from PLAN section 4 (a policy baseline, not ground truth)
-- 1005: HOLD instead of REJECT (no documented signal beyond stock; see 3).
-- 1007: REJECT instead of HOLD (arithmetic does not reconcile; see 2).
-- 1013.json: REJECT instead of HOLD (arithmetic does not reconcile; see 2).
-- 1002, 1008, 1012 (both files), 1016 and 9001 in `--llm none`: HOLD for system reasons because the
-  task needs an LLM (messy text, OCR text, item mapping, VP review above 10,000).
-- 9003 has no section 4 entry.
+## 12. PLAN section 4 baseline refreshed
+PLAN section 4 was updated to follow the validation and risk policy: 1005 HOLD, 1007 REJECT
+(arithmetic), 1013.json REJECT (arithmetic). Those rows now match. The baseline is a documented
+policy baseline, not ground truth, and lives in `docs/baseline_plan4.json`. Remaining gaps are
+labelled: `expected exception` (the mode cannot do the task, for example messy text with
+`--llm none`), `missing fixture`, and `no baseline` (invoice_9003 has no section 4 row).

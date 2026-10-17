@@ -52,7 +52,7 @@ def test_class_counts_sum_to_22():
     for name in ("expected_none.yaml", "expected_fixture.yaml"):
         counts = Counter(e["class"] for e in load(name))
         assert sum(counts.values()) == 22, (name, counts)
-        assert set(counts) <= {"match", "policy mismatch", "expected exception", "missing fixture"}
+        assert set(counts) <= {"match", "expected exception", "missing fixture", "no baseline"}
 
 
 def test_fixture_mode_covers_every_document():

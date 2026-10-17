@@ -88,6 +88,15 @@ in `tests/regression/expected.yaml`, written before the first live run.
 
 **22/22 match**
 
+The first full live run matched 19 of 22 expectations. Three fixes followed (see
+`docs/DECISIONS.md` #13): one grounding bug for quantities like "x12", and two prompt
+clarifications (abbreviated labels such as "Amt:"; the critic only requests revisions for
+substantive problems). The responses were then re-recorded. The 22/22 result is on the same
+documents the prompts were adjusted against, so it is not a held-out evaluation.
+
+The sample invoices come from the case repository
+https://github.com/galatiq-ai/galatiq-case-invoices.
+
 The regression test (`tests/regression/test_regression.py`) asserts every decision, that nothing
 but APPROVE is paid, and that no idempotency key is paid twice. It fails if a cached response is
 missing. About 39k input and 20k output tokens were spent building the cache and prompts, roughly

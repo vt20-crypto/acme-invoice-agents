@@ -74,3 +74,44 @@ def test_app_processes_a_sample_end_to_end(tmp_path, monkeypatch):
     heads = [s.value for s in at.subheader]
     assert any("APPROVE" in h and h.startswith("Decision:") for h in heads), heads
     assert any("authored fixture" in m.value for m in at.markdown), "provenance label missing"
+
+
+def test_cause_and_label_separate_system_issues_from_business_reasons():
+    from invoice_agents.presentation import cause, decision_label, split_reasons
+
+    sys_f = Finding(code="fixture_missing", severity="hold", message="no fixture")
+    biz_f = Finding(code="stock_exceeded", severity="hold", message="too many")
+    assert sys_f.kind == "execution" and biz_f.kind == "business"
+    assert cause("HOLD", [sys_f]) == "system"
+    assert cause("HOLD", [biz_f]) == "business"
+    assert cause("HOLD", [sys_f, biz_f]) == "both"
+    assert cause("APPROVE", []) == "-" and cause("DUPLICATE", [biz_f]) == "-"
+    assert decision_label("HOLD", [sys_f]) == (
+        "HOLD – system issue: no fixture for this document or step"
+    )
+    assert split_reasons([sys_f, biz_f]) == {
+        "business": ["stock_exceeded: too many"],
+        "execution": ["fixture_missing: no fixture"],
+    }
+
+
+def test_ui_disables_approve_for_ineligible_hold_and_shows_reason(tmp_path, monkeypatch):
+    from conftest import INVOICES
+    from streamlit.testing.v1 import AppTest
+
+    from invoice_agents.batch import run_batch
+    from invoice_agents.db import Database
+
+    db_path = tmp_path / "ui.db"
+    db = Database(db_path)
+    run_batch([INVOICES / "invoice_1014.xml", INVOICES / "invoice_1005.json"], db, None, "none")
+    db.close()
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.text_input[0].set_value(str(db_path)).run()
+    assert not at.exception
+    approve = [b for b in at.button if b.label == "Approve anyway"]
+    assert len(approve) == 2
+    by_disabled = sorted(b.disabled for b in approve)
+    assert by_disabled == [False, True]  # EUR invoice disabled, USD stock hold enabled
+    assert any("no FX" in w.value for w in at.warning)

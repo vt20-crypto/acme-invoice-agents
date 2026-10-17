@@ -21,8 +21,8 @@ def make(**kw) -> Invoice:
     return Invoice(**base)
 
 
-def run(inv, db, proposed=None):
-    return validate(inv, proposed or code_resolve(inv, db), db)
+def run(inv, db, proposed=None, searched=None):
+    return validate(inv, proposed or code_resolve(inv, db), db, searched)
 
 
 def codes(res, severity=None):
@@ -70,13 +70,23 @@ def test_unknown_items_and_stock(db):
         subtotal=2510.0,
         total=2510.0,
     )
-    assert "unknown_items" in codes(run(inv, db), "hold")
+    # the LLM searched (searched=True) and found nothing: a business finding
+    res = run(inv, db, searched=[False, True])
+    assert "unknown_items" in codes(res, "hold") and "item_needs_mapping" not in codes(res)
+    # nobody searched: a coverage gap, not evidence the item is fake
+    res = run(inv, db)
+    assert "item_needs_mapping" in codes(res, "hold") and "unknown_items" not in codes(res)
+    assert next(f for f in res.findings if f.code == "item_needs_mapping").kind == "execution"
     all_unknown = make(
         line_items=[LineItem(raw_name="SuperGizmo", quantity=1, unit_price=10.0)],
         subtotal=10.0,
         total=10.0,
     )
-    assert "all_items_unknown" in codes(run(all_unknown, db), "reject")
+    assert "all_items_unknown" in codes(run(all_unknown, db, searched=[True]), "reject")
+    unsearched = run(all_unknown, db)  # no LLM search ran: HOLD, never a REJECT
+    assert "all_items_unknown" not in codes(unsearched) and "item_needs_mapping" in codes(
+        unsearched, "hold"
+    )
 
 
 def test_stock_is_aggregated_per_sku(db):
@@ -94,7 +104,7 @@ def test_stock_is_aggregated_per_sku(db):
 
 def test_llm_proposed_sku_not_in_db_is_treated_as_unknown(db):
     inv = make()
-    res = run(inv, db, proposed=["WidgetZ"])
+    res = run(inv, db, proposed=["WidgetZ"], searched=[True])
     assert res.resolved == [None]
     assert "all_items_unknown" in codes(res, "reject") and "sku_not_in_db" in codes(res)
 

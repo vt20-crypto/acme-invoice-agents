@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from .config import PAYABLE_CURRENCY
 from .db import Database
 from .models import Decision
 from .payments import pay_invoice
@@ -32,6 +33,47 @@ def reasons_for(row: dict[str, Any]) -> list[dict[str, Any]]:
     """Blocking findings (reject/hold severity) recorded for a ledger row."""
     findings = json.loads(row.get("findings_json") or "[]")
     return [f for f in findings if f["severity"] in ("reject", "hold")]
+
+
+@dataclass
+class Eligibility:
+    ok: bool
+    reasons: list[str]
+
+
+def approval_eligibility(row: dict[str, Any]) -> Eligibility:
+    """Can a human approve this ledger row? Pure function of the stored row, shared by the backend
+    check and the UI (which disables the button and shows these reasons)."""
+    why: list[str] = []
+    if row["decision"] != Decision.HOLD.value or row["review_status"]:
+        why.append(f"Not an open HOLD (decision {row['decision']}).")
+    if not row.get("vendor"):
+        why.append("Vendor is missing.")
+    if not (row.get("vendor_norm") and row.get("invoice_number_norm")):
+        why.append("Invoice number is missing, so no payment key can be formed.")
+    total = row.get("total")
+    if total is None or total <= 0:
+        why.append("Invoice total is missing or not a positive amount.")
+    if (row.get("currency") or "").upper() != PAYABLE_CURRENCY:
+        why.append(
+            f"Currency {row.get('currency')} is not supported: the payment rail is "
+            f"{PAYABLE_CURRENCY}-only and there is no FX conversion."
+        )
+    findings = json.loads(row.get("findings_json") or "[]")
+    if any(f["severity"] == "reject" for f in findings):
+        why.append("A REJECT blocker cannot be overridden by a reviewer.")
+    unverified = [
+        f
+        for f in findings
+        if f.get("kind") == "execution" and f.get("stage") in ("extraction", "resolve")
+    ]
+    if unverified:
+        why.append(
+            "A system issue left fields unverified ("
+            + ", ".join(sorted({f["code"] for f in unverified}))
+            + "); re-run once it is fixed."
+        )
+    return Eligibility(not why, why)
 
 
 def review_queue(db: Database) -> list[dict[str, Any]]:
@@ -67,12 +109,9 @@ def review_hold(
         )
         return ReviewResult(ledger_id, action, "rejected")
 
-    if any(f["severity"] == "reject" for f in reasons_for(row)):
-        raise ReviewError("A REJECT blocker cannot be overridden by a reviewer.")
-    if not (row["vendor"] and row["vendor_norm"] and row["invoice_number_norm"]):
-        raise ReviewError("Vendor or invoice number is missing; nothing can be paid.")
-    if row["total"] is None:
-        raise ReviewError("Invoice total is missing; nothing can be paid.")
+    elig = approval_eligibility(row)
+    if not elig.ok:
+        raise ReviewError("Cannot approve: " + " ".join(elig.reasons))
 
     pay = pay_invoice(
         db,

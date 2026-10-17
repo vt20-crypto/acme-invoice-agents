@@ -18,12 +18,20 @@ from invoice_agents.llm.client import LLMUnavailable
 from invoice_agents.presentation import (
     SEVERITY_BADGE,
     decision_badge,
+    decision_label,
     group_findings,
     key_codes,
     paid_text,
     provenance_label,
+    split_reasons,
 )
-from invoice_agents.review import ReviewError, reasons_for, review_hold, review_queue
+from invoice_agents.review import (
+    ReviewError,
+    approval_eligibility,
+    reasons_for,
+    review_hold,
+    review_queue,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_DIRS = [ROOT / "data" / "invoices", ROOT / "data" / "synthetic"]
@@ -77,7 +85,11 @@ def get_client(mode: str):
 
 def render_result(state) -> None:
     decision = state["decision"].value
+    findings_all = state.get("findings", [])
     st.subheader(f"Decision: {decision_badge(decision)}")
+    label = decision_label(decision, findings_all)
+    if label != decision:
+        st.write(label)
     pay = state.get("payment")
     if pay and pay["status"] == "paid":
         st.write(f"Payment: paid {pay['amount']:,.2f} to {pay['vendor']}")
@@ -86,8 +98,13 @@ def render_result(state) -> None:
     else:
         st.write("Payment: none")
 
-    groups = group_findings(state.get("findings", []))
-    st.markdown("**Findings**")
+    split = split_reasons(findings_all)
+    if split["execution"]:
+        st.markdown("**\U0001f6e0\ufe0f System issues (not vendor or invoice defects)**")
+        for line in split["execution"]:
+            st.markdown(f"- {line}")
+    groups = group_findings([f for f in findings_all if f.kind == "business"])
+    st.markdown("**Business findings**")
     shown = False
     for sev in ("reject", "hold", "note"):
         if groups[sev]:
@@ -96,7 +113,7 @@ def render_result(state) -> None:
             for line in groups[sev]:
                 st.markdown(f"- {line}")
     if not shown:
-        st.write("No findings.")
+        st.write("No business findings.")
 
     st.markdown("**Step-by-step trace**")
     for i, step in enumerate(state["steps"], 1):
@@ -182,6 +199,7 @@ def tab_batch(mode: str, db_path: str) -> None:
                 {
                     "File": Path(r["file"]).name,
                     "Decision": decision_badge(r["decision"]),
+                    "Cause": r["cause"],
                     "Key findings": key_codes(r),
                     "Amount": r["total"],
                     "Paid?": paid_text(r),
@@ -225,12 +243,15 @@ def tab_ledger(db_path: str) -> None:
             with st.expander(f"#{r['id']} {name} ({r['vendor'] or 'unknown vendor'})"):
                 for f in reasons_for(r):
                     st.markdown(f"- {f['message']}")
+                elig = approval_eligibility(r)
+                if not elig.ok:
+                    st.warning("\u26d4 Approve is disabled: " + " ".join(elig.reasons))
                 with st.form(f"review_{r['id']}"):
                     reviewer = st.text_input(
                         "Reviewer name", value="reviewer", key=f"who_{r['id']}"
                     )
                     note = st.text_input("Reviewer note (required)", key=f"note_{r['id']}")
-                    approve = st.form_submit_button("Approve anyway")
+                    approve = st.form_submit_button("Approve anyway", disabled=not elig.ok)
                     reject = st.form_submit_button("Reject")
                 if approve or reject:
                     try:

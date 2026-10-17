@@ -74,20 +74,14 @@ def build_graph(ctx: Context):
         if ex.uncertain:
             findings.append(
                 Finding(
-                    code="uncertain_extraction",
+                    code=ex.failure_code or "extraction_failed",
                     severity="hold",
-                    message="Extraction is uncertain; a human must check the fields.",
+                    message="System issue: the document could not be extracted reliably "
+                    "(this is not a vendor defect).",
                     evidence="; ".join(ex.reasons),
+                    stage="extraction",
                 )
             )
-            if any("LLM unavailable" in r for r in ex.reasons):
-                findings.append(
-                    Finding(
-                        code="llm_unavailable",
-                        severity="hold",
-                        message="LLM unavailable for extraction.",
-                    )
-                )
         inv = ex.invoice
         lines = [f"format={doc.format}  method={ex.method}  fingerprint={doc.key}"]
         if ex.provenance:
@@ -141,10 +135,11 @@ def build_graph(ctx: Context):
             lines.append(f"LLM resolution failed; unresolved lines stay unknown: {out.error}")
             findings.append(
                 Finding(
-                    code="llm_unavailable",
+                    code=out.error_code or "llm_unavailable",
                     severity="hold",
-                    message="LLM unavailable for item resolution.",
+                    message="System issue: the LLM item search could not run.",
                     evidence=out.error,
+                    stage="resolve",
                 )
             )
         calls = (
@@ -172,18 +167,13 @@ def build_graph(ctx: Context):
     def validate_node(state: PipelineState) -> dict[str, Any]:
         inv = state["invoice"]
         assert inv is not None
-        res = validate(inv, state["resolve"].proposed, db)
+        res = validate(inv, state["resolve"].proposed, db, state["resolve"].searched)
         tiers = state["resolve"].tiers
         res.facts["resolution.tiers"] = (
             f"{tiers.count('code')} line(s) resolved by code, "
             f"{tiers.count('llm')} by LLM tool call, {tiers.count('unresolved')} unresolved; "
             "every SKU re-verified exactly in the database"
         )
-        if state["resolve"].error:
-            # An LLM outage must not look like proof that the items are fake.
-            for f in res.findings:
-                if f.code == "all_items_unknown":
-                    f.severity = "hold"
         if (
             REVISION_NAME.search(Path(state["path"]).name)
             and not res.duplicate_of

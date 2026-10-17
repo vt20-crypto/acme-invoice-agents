@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import MAX_VP_REVISIONS, VP_REVIEW_THRESHOLD
-from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed
+from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
 from .models import Critique, Decision, Finding, Invoice, Reason, VPDraft
 
 _RANK = {Decision.APPROVE: 0, Decision.HOLD: 1, Decision.REJECT: 2}
@@ -93,6 +93,7 @@ def run_approval(
                     f"Total {total:,.2f} exceeds {VP_REVIEW_THRESHOLD:,.0f}; "
                     "VP review requires LLM."
                 ),
+                stage="approval",
             )
             return ApprovalOutcome(Decision.HOLD, findings=[f], notes=["Rules only (no LLM)."])
         return ApprovalOutcome(
@@ -169,14 +170,16 @@ def run_approval(
                 severity="hold",
                 message=f"VP draft still had issues after {MAX_VP_REVISIONS} revisions.",
                 evidence="; ".join(issues),
+                stage="approval",
             )
         )
     except (LLMUnavailable, SchemaValidationFailed) as exc:
         out.findings.append(
             Finding(
-                code="llm_unavailable",
+                code=failure_code(exc),
                 severity="hold",
-                message=f"LLM unavailable for approval: {exc}",
+                message=f"System issue: the LLM approval step could not run: {exc}",
+                stage="approval",
             )
         )
     out.decision = Decision.HOLD

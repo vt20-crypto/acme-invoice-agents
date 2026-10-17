@@ -6,7 +6,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class LineItem(BaseModel):
@@ -44,11 +44,35 @@ class Decision(StrEnum):
     DUPLICATE = "DUPLICATE"
 
 
+# Execution findings describe the system failing to do its job (no LLM, missing or stale fixture,
+# extraction or mapping not completed). They are never a vendor or invoice defect.
+EXECUTION_CODES = frozenset(
+    {
+        "llm_unavailable",
+        "fixture_missing",
+        "fixture_stale",
+        "extraction_failed",
+        "item_needs_mapping",
+        "critic_unresolved",
+        "vp_requires_llm",
+        "payment_failed",
+    }
+)
+
+
 class Finding(BaseModel):
     code: str
     severity: Literal["reject", "hold", "note"]
     message: str
     evidence: str = ""
+    kind: Literal["business", "execution"] = "business"
+    stage: str = ""  # extraction | resolve | approval | payment (set on execution findings)
+
+    @model_validator(mode="after")
+    def _classify(self) -> Finding:
+        if self.code in EXECUTION_CODES:
+            self.kind = "execution"
+        return self
 
 
 # --- LLM response schemas -------------------------------------------------------------

@@ -13,6 +13,7 @@ from .ingestion.parsers import parse_file
 from .llm.client import FixtureClient, LiveClient, LLMClient, LLMUnavailable
 from .logs import jlog
 from .models import Decision
+from .presentation import decision_label, split_reasons
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -55,10 +56,18 @@ def render(state: PipelineState, ctx: Context, prior: dict | None) -> str:
         out.append(f"Payment: none (duplicate of ledger #{state.get('duplicate_of')})")
     else:
         out.append("Payment: none")
-    reasons = [f"{f.code}: {f.message}" for f in state.get("findings", []) if f.severity != "note"]
-    if decision is not Decision.APPROVE and reasons:
-        out.append("Reasons:")
-        out += [f"  - {r}" for r in reasons]
+    findings = state.get("findings", [])
+    out[out.index(f"Decision: {decision.value}")] = (
+        f"Decision: {decision_label(decision.value, findings)}"
+    )
+    if decision is not Decision.APPROVE:
+        split = split_reasons(findings)
+        if split["execution"]:
+            out.append("System issues (not vendor or invoice defects):")
+            out += [f"  - {r}" for r in split["execution"]]
+        if split["business"]:
+            out.append("Business reasons:")
+            out += [f"  - {r}" for r in split["business"]]
     calls = state.get("llm_calls", [])
     if calls:
         out.append("LLM provenance by step:")

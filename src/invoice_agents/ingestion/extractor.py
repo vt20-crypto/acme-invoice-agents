@@ -15,7 +15,7 @@ from datetime import date, datetime
 from typing import Any
 
 from ..config import MAX_EXTRACT_RETRIES
-from ..llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed
+from ..llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
 from ..logs import jlog
 from ..models import Charge, Invoice, LineItem
 from ..normalize import number_grounded, numbers_in_text, parse_number, text_grounded
@@ -31,6 +31,7 @@ class ExtractionResult:
     provenance: str | None = None
     attempts: int = 0
     llm_calls: list[dict[str, Any]] = field(default_factory=list)
+    failure_code: str | None = None  # set whenever uncertain: why the system could not extract
 
 
 # --- helpers ---------------------------------------------------------------------------
@@ -262,7 +263,13 @@ def extract_labelled(doc: RawDocument) -> ExtractionResult:
                 f"{inv.subtotal:,.2f} (items probably missed)"
             )
     if reasons:
-        return ExtractionResult(inv if (vendor or items) else None, True, "label_fallback", reasons)
+        return ExtractionResult(
+            inv if (vendor or items) else None,
+            True,
+            "label_fallback",
+            reasons,
+            failure_code="extraction_failed",
+        )
     return ExtractionResult(inv, False, "label_fallback")
 
 
@@ -339,7 +346,9 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
             calls.append(
                 {"agent": "extraction", "step": step or "initial", "outcome": "unavailable"}
             )
-            return ExtractionResult(last, True, "llm", reasons, prov, attempt + 1, calls)
+            return ExtractionResult(
+                last, True, "llm", reasons, prov, attempt + 1, calls, failure_code=failure_code(exc)
+            )
         last = inv
         problems = check_grounding(inv, doc.raw_text)
         calls.append(
@@ -363,7 +372,16 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
                 + "\nReturn corrected JSON using only values that appear in the document.",
             },
         ]
-    return ExtractionResult(last, True, "llm", reasons, prov, 1 + MAX_EXTRACT_RETRIES, calls)
+    return ExtractionResult(
+        last,
+        True,
+        "llm",
+        reasons,
+        prov,
+        1 + MAX_EXTRACT_RETRIES,
+        calls,
+        failure_code="extraction_failed",
+    )
 
 
 def extract(doc: RawDocument, client: LLMClient | None) -> ExtractionResult:
@@ -371,7 +389,13 @@ def extract(doc: RawDocument, client: LLMClient | None) -> ExtractionResult:
         try:
             return ExtractionResult(extract_structured(doc), False, "code")
         except Exception as exc:  # malformed structure -> uncertain, never a crash
-            return ExtractionResult(None, True, "code", [f"structured mapping failed: {exc}"])
+            return ExtractionResult(
+                None,
+                True,
+                "code",
+                [f"structured mapping failed: {exc}"],
+                failure_code="extraction_failed",
+            )
     if client is None:
         return extract_labelled(doc)
     return extract_with_llm(doc, client)

@@ -85,4 +85,4 @@ def test_fixture_mode_file_without_fixtures_holds_llm_unavailable(tmp_path):
     _, states = run(tmp_path, entries, FixtureClient(FIXTURES), "fixture")
     st = states["data/invoices/invoice_1012.txt"]
     assert st["decision"].value == "HOLD"
-    assert {"uncertain_extraction", "llm_unavailable"} <= {f.code for f in st["findings"]}
+    assert {f.code for f in st["findings"]} == {"fixture_missing"}

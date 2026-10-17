@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .db import Database
-from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, Tool
+from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, Tool, failure_code
 from .models import Invoice, ResolutionResult
 from .validation import code_resolve
 
@@ -32,6 +32,8 @@ class ResolveOutcome:
     provenance: str | None = None
     tool_trace: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None  # set when the LLM path failed (lines stay unresolved)
+    error_code: str | None = None
+    searched: list[bool] = field(default_factory=list)  # per line: the LLM search actually ran
 
 
 def search_inventory_tool(db: Database) -> Tool:
@@ -55,8 +57,9 @@ def resolve_items(
     proposed = code_resolve(invoice, db)
     tiers = ["code" if sku else "unresolved" for sku in proposed]
     todo = [i for i, sku in enumerate(proposed) if sku is None]
+    nobody = [False] * len(proposed)
     if not todo or client is None:
-        return ResolveOutcome(proposed, tiers, "code")
+        return ResolveOutcome(proposed, tiers, "code", searched=nobody)
     names = [invoice.line_items[i].raw_name for i in todo]
     messages = [
         {"role": "system", "content": RESOLVE_SYSTEM},
@@ -67,7 +70,9 @@ def resolve_items(
             "resolve_items", messages, [search_inventory_tool(db)], ResolutionResult, key=key
         )
     except (LLMUnavailable, SchemaValidationFailed) as exc:
-        return ResolveOutcome(proposed, tiers, "tiered", error=str(exc))
+        return ResolveOutcome(
+            proposed, tiers, "tiered", error=str(exc), error_code=failure_code(exc), searched=nobody
+        )
     assert isinstance(result.obj, ResolutionResult)
     pool = list(result.obj.items)
     for i in todo:
@@ -76,4 +81,7 @@ def resolve_items(
             pool.remove(match)
             if match.sku:
                 proposed[i], tiers[i] = match.sku, "llm"
-    return ResolveOutcome(proposed, tiers, "tiered", result.provenance, result.tool_trace)
+    searched = [i in todo for i in range(len(proposed))]
+    return ResolveOutcome(
+        proposed, tiers, "tiered", result.provenance, result.tool_trace, searched=searched
+    )

@@ -66,12 +66,22 @@ def _money(x: float) -> str:
     return f"{x:,.2f}"
 
 
-def validate(invoice: Invoice, proposed: list[str | None], db: Database) -> ValidationResult:
+def validate(
+    invoice: Invoice,
+    proposed: list[str | None],
+    db: Database,
+    searched: list[bool] | None = None,
+) -> ValidationResult:
+    """``searched[i]`` says whether an LLM inventory search was actually run for line i. A name
+    that code could not resolve and nobody searched is a coverage gap (``item_needs_mapping``),
+    not evidence that the item is fake."""
     res = ValidationResult()
     f = res.findings
 
-    def add(code: str, severity: Any, message: str, evidence: str = "") -> None:
-        f.append(Finding(code=code, severity=severity, message=message, evidence=evidence))
+    def add(code: str, severity: Any, message: str, evidence: str = "", stage: str = "") -> None:
+        f.append(
+            Finding(code=code, severity=severity, message=message, evidence=evidence, stage=stage)
+        )
 
     # 1. Re-check every proposed SKU exactly against the DB; an unknown SKU is simply unknown.
     for i, sku in enumerate(proposed):
@@ -203,14 +213,33 @@ def validate(invoice: Invoice, proposed: list[str | None], db: Database) -> Vali
     unknown = [
         li.raw_name for li, sku in zip(invoice.line_items, res.resolved, strict=True) if not sku
     ]
+    searched = searched or [False] * len(invoice.line_items)
+    unsearched = [
+        li.raw_name
+        for li, sku, s in zip(invoice.line_items, res.resolved, searched, strict=True)
+        if not sku and not s
+    ]
+    searched_unknown = [n for n in unknown if n not in unsearched]
     if invoice.line_items:
-        if len(unknown) == len(invoice.line_items):
+        if unsearched:
+            add(
+                "item_needs_mapping",
+                "hold",
+                "Item name(s) could not be matched by code and no inventory search was run, "
+                "so they need mapping.",
+                ", ".join(unsearched),
+                stage="resolve",
+            )
+        if searched_unknown and len(unknown) == len(invoice.line_items):
             add(
                 "all_items_unknown", "reject", "No line item matches inventory.", ", ".join(unknown)
             )
-        elif unknown:
+        elif searched_unknown:
             add(
-                "unknown_items", "hold", "Some line items are not in inventory.", ", ".join(unknown)
+                "unknown_items",
+                "hold",
+                "Some line items are not in inventory.",
+                ", ".join(searched_unknown),
             )
     res.facts["validation.items"] = (
         f"{len(invoice.line_items) - len(unknown)} of {len(invoice.line_items)} line items "

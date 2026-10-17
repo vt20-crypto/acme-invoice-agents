@@ -10,7 +10,7 @@ from typing import Any
 from .db import Database
 from .graph import Context, PipelineState, process_invoice
 from .llm.client import LLMClient
-from .presentation import key_codes
+from .presentation import cause, decision_label, key_codes
 
 SUPPORTED = {".txt", ".pdf", ".csv", ".json", ".xml"}
 
@@ -38,6 +38,14 @@ def result_record(state: PipelineState, run_id: str) -> dict[str, Any]:
         "total": inv.total if inv else None,
         "currency": inv.currency if inv else None,
         "codes": sorted({f.code for f in findings}),
+        "cause": cause(state["decision"].value, findings),
+        "decision_label": decision_label(state["decision"].value, findings),
+        "execution_failures": sorted(
+            {f.code for f in findings if f.kind == "execution" and f.severity != "note"}
+        ),
+        "business_findings": sorted(
+            {f.code for f in findings if f.kind == "business" and f.severity != "note"}
+        ),
         "findings": [f.model_dump() for f in findings],
         "reasons": [r.model_dump() for r in state.get("reasons", [])],
         "payment": state.get("payment"),
@@ -70,10 +78,10 @@ def write_results(path: str | Path, records: Iterable[dict[str, Any]]) -> None:
 
 
 def summary_table(records: list[dict[str, Any]]) -> str:
-    rows = [("file", "decision", "key findings")]
+    rows = [("file", "decision", "cause", "key findings")]
     for r in records:
-        rows.append((Path(r["file"]).name, r["decision"], key_codes(r)))
-    w = [max(len(row[i]) for row in rows) for i in range(2)]
-    lines = [f"{a:<{w[0]}}  {b:<{w[1]}}  {c}" for a, b, c in rows]
+        rows.append((Path(r["file"]).name, r["decision"], r["cause"], key_codes(r)))
+    w = [max(len(row[i]) for row in rows) for i in range(3)]
+    lines = [f"{a:<{w[0]}}  {b:<{w[1]}}  {c:<{w[2]}}  {d}" for a, b, c, d in rows]
     lines.insert(1, "-" * len(lines[0]))
     return "\n".join(lines)

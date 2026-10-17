@@ -37,6 +37,23 @@ class FixtureError(LLMUnavailable):
     """A fixture file exists but is malformed or lacks a valid provenance label."""
 
 
+class FixtureMissing(LLMUnavailable):
+    """No fixture file exists for this agent, document and step."""
+
+
+class FixtureStale(FixtureError):
+    """A fixture exists but was made for a different prompt, schema, input or settings."""
+
+
+def failure_code(exc: BaseException) -> str:
+    """Execution-failure code for an LLM-side exception."""
+    if isinstance(exc, FixtureMissing):
+        return "fixture_missing"
+    if isinstance(exc, FixtureStale):
+        return "fixture_stale"
+    return "llm_unavailable"
+
+
 class SchemaValidationFailed(Exception):
     """The model's output did not validate against the schema. Carries the exact error text."""
 
@@ -244,7 +261,7 @@ class FixtureClient(LLMClient):
             raise LLMUnavailable(f"{agent}: no fixture key given")
         path = self.root / agent / f"{key}{suffix}.json"
         if not path.exists():
-            raise LLMUnavailable(f"no fixture for {agent} at {path}")
+            raise FixtureMissing(f"no fixture for {agent} at {path}")
         try:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as exc:

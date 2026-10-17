@@ -40,8 +40,6 @@ CACHE_DIR = ROOT / "cache" / "llm"
 
 CSS = """
 <style>
-.stApp { background: #fcfcfb; }
-html, body, [class*="st-"] { font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
 .card { background:#f9f9f7; border:0.5px solid #e4e3dd; border-radius:12px; padding:1rem 1.25rem;
         margin-bottom:10px; color:#20201f; }
 .card.ok { border-color:#aee0a9; } .card.hold { border-color:#f9c868; }
@@ -69,7 +67,8 @@ ICON_WORD = {"check": "done", "warn": "needs attention", "fail": "failed", "dash
 
 
 def esc(x) -> str:
-    return html.escape(str(x))
+    # "$" becomes an entity so st.markdown does not pair two dollar amounts into a LaTeX span.
+    return html.escape(str(x)).replace("$", "&#36;")
 
 
 def sample_files() -> list[Path]:

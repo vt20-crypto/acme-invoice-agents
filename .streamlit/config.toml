@@ -1,0 +1,13 @@
+# Explicit light theme (colours from the design mockup). Without this Streamlit follows the OS
+# colour scheme, and a dark OS gives light text that the app's cards and page then render on
+# near-white backgrounds.
+[theme]
+base = "light"
+primaryColor = "#d97757"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f3f3f0"
+textColor = "#20201f"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false

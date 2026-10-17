@@ -413,9 +413,12 @@ class LLMClient:
         raise LLMUnavailable(f"{agent}: no final answer within {max_iterations} tool iterations")
 
 
-def make_client(mode: str, cache_dir: str | Path = "cache/llm") -> LLMClient | None:
+def make_client(
+    mode: str, cache_dir: str | Path = "cache/llm", api_key: str | None = None
+) -> LLMClient | None:
     """``none`` -> None. ``cache`` -> replay only. ``live`` -> real calls that fill the cache.
-    ``auto`` -> recorded response, else live when a key is set, else rules only."""
+    ``auto`` -> recorded response, else live when a key is set, else rules only. ``api_key``
+    overrides LLM_API_KEY for this client only (the UI passes a per-session key this way)."""
     from dotenv import load_dotenv
 
     if mode == "none":
@@ -424,7 +427,7 @@ def make_client(mode: str, cache_dir: str | Path = "cache/llm") -> LLMClient | N
     model = os.environ.get("LLM_MODEL", "grok-4.3")
     if mode == "cache":
         return LLMClient(CacheTransport(cache_dir, model))
-    key = os.environ.get("LLM_API_KEY", "").strip()
+    key = (api_key or os.environ.get("LLM_API_KEY", "")).strip()
     if mode == "auto":
         live = None
         if key:

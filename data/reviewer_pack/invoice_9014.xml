@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<invoice>
+  <header>
+    <invoice_number>EU-4410</invoice_number>
+    <vendor>Rhein Components GmbH</vendor>
+    <date>2026-02-13</date>
+    <due_date>2026-03-15</due_date>
+    <currency>EUR</currency>
+  </header>
+  <line_items>
+    <item>
+      <name>WidgetB</name>
+      <quantity>4</quantity>
+      <unit_price>450.00</unit_price>
+    </item>
+  </line_items>
+  <totals>
+    <subtotal>1800.00</subtotal>
+    <tax_rate>0.10</tax_rate>
+    <tax_amount>180.00</tax_amount>
+    <total>1980.00</total>
+  </totals>
+  <payment_terms>Net 30</payment_terms>
+</invoice>

@@ -1,4 +1,4 @@
-.PHONY: install test lint run reset ui eval
+.PHONY: install test lint run reset ui eval eval-pack
 
 install:
 	uv sync
@@ -20,3 +20,6 @@ ui:
 
 eval:
 	uv run python main.py eval --llm cache
+
+eval-pack:
+	uv run python main.py eval --llm cache --expected data/reviewer_pack/expected_results.csv

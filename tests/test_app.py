@@ -103,3 +103,30 @@ def test_injected_html_is_balanced(tmp_path, monkeypatch):
         p = Balance()
         p.feed(snippet)
         assert not p.stack, f"unclosed tags {p.stack} in {snippet[:80]}"
+
+
+def test_settings_has_a_session_only_api_key_field_that_stays_out_of_the_environment(
+    tmp_path, monkeypatch
+):
+    import os
+
+    at = app(tmp_path, monkeypatch, "cache")
+    field = next(t for t in at.text_input if t.label == "xAI API key (optional)")
+    assert field.proto.type == 1  # password
+    assert any("never saved" in c.value for c in at.caption)
+    field.set_value("xai-test-key").run()
+    assert not at.exception
+    assert "Live Grok" in at.radio(key="engine").options  # a session key unlocks live mode
+    assert os.environ["LLM_API_KEY"] == ""
+
+
+def test_dashboard_offers_downloads_and_an_expected_check_after_samples(tmp_path, monkeypatch):
+    at = app(tmp_path, monkeypatch, "cache")
+    assert not at.get("download_button")  # empty ledger: nothing to download yet
+    click(at, "Load sample invoices")
+    labels = [d.proto.label for d in at.get("download_button")]
+    assert labels == [
+        "Download results (CSV)",
+        "Download results (JSON)",
+        "Download expected-results template",
+    ]

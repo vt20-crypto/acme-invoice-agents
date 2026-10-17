@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 
-from .batch import collect_files, result_record, summary_table
+from .batch import collect_files, result_record, run_batch, summary_table
 from .db import Database
+from .export import compare_expected, result_rows, summary_line, write_results
 from .graph import Context, PipelineState, process_invoice
 from .ingestion.parsers import parse_file
 from .llm.client import LLMUnavailable, make_client
@@ -25,6 +27,13 @@ from .presentation import (
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="main.py", description="Acme invoice processing agents")
     p.add_argument("command", nargs="?", choices=["run", "reset", "eval"], default="run")
+    p.add_argument(
+        "dirs",
+        nargs="*",
+        metavar="DIR",
+        help="eval --expected only: directories holding the invoices (default: the folder of "
+        "the expected file)",
+    )
     p.add_argument("--invoice_path", help="path to an invoice file (txt, pdf, csv, json, xml)")
     p.add_argument(
         "--batch",
@@ -44,6 +53,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--db", default="acme.db", help="SQLite database file")
     p.add_argument("--cache", default="cache/llm", help="LLM response cache directory")
     p.add_argument("--fresh", action="store_true", help="wipe and reseed the database first")
+    p.add_argument(
+        "--out",
+        metavar="PATH",
+        help="also write the results of this run to PATH (CSV, or JSON if it ends in .json)",
+    )
+    p.add_argument(
+        "--expected",
+        metavar="FILE.csv",
+        help="eval only: CSV with columns file,expected_decision; process the invoices and "
+        "compare (without it, eval checks the built-in samples)",
+    )
     return p
 
 
@@ -126,6 +146,47 @@ def run_eval(mode: str, cache: str) -> int:
     return 0 if ev["matched"] == ev["total"] else 1
 
 
+def run_eval_expected(args: argparse.Namespace) -> int:
+    """Process the invoices next to a user's expected-results CSV and compare decisions."""
+    expected = Path(args.expected)
+    if not expected.is_file():
+        print(f"error: file not found: {args.expected}", file=sys.stderr)
+        return 2
+    try:
+        client = make_client(args.llm, args.cache)
+    except LLMUnavailable as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    files = [
+        p
+        for p in collect_files(args.dirs or [expected.parent])
+        if p.resolve() != expected.resolve()
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(Path(tmp) / "eval.db")
+        try:
+            results = run_batch(files, db, client, args.llm)
+        finally:
+            db.close()
+    processed = [
+        {"file": Path(s["path"]).name, "decision": s["decision"].value} for s, _ in results
+    ]
+    try:
+        cmp = compare_expected(processed, expected.read_text())
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    width = max((len(r["file"]) for r in cmp["rows"]), default=4)
+    print(f"{'file':<{width}}  {'expected':<10} {'actual':<10}")
+    for r in cmp["rows"]:
+        mark = "\u2713" if r["match"] else "\u2717"
+        print(f"{r['file']:<{width}}  {r['expected'] or '-':<10} {r['actual']:<10} {mark}")
+    if cmp["not_processed"]:
+        print("\nExpected but not processed: " + ", ".join(cmp["not_processed"]))
+    print(f"\n{summary_line(cmp)} (mode {args.llm})")
+    return 0 if cmp["matched"] == cmp["total"] and not cmp["not_processed"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     db = Database(args.db)
@@ -135,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Database {args.db} reset and reseeded.")
             return 0
         if args.command == "eval":
+            if args.expected:
+                return run_eval_expected(args)
             return run_eval(args.llm, args.cache)
         if not args.invoice_path and not args.batch:
             print("error: --invoice_path or --batch is required", file=sys.stderr)
@@ -151,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         paths = collect_files(args.batch) if args.batch else [Path(args.invoice_path)]
         records = []
+        run_ids = set()
         for path in paths:
             ctx = Context(db=db, client=client, llm_mode=args.llm)
             prior = db.find_by_fingerprint(parse_file(path).fingerprint)
@@ -158,10 +222,15 @@ def main(argv: list[str] | None = None) -> int:
             state = process_invoice(str(path), ctx)
             jlog("run_end", run_id=ctx.run_id, decision=state["decision"].value)
             records.append(result_record(state, ctx.run_id))
+            run_ids.add(ctx.run_id)
             if not args.batch:
                 print(render(state, ctx, prior))
         if args.batch:
             print(summary_table(records))
+        if args.out:
+            ledger = [r for r in db.ledger() if r["run_id"] in run_ids]
+            write_results(result_rows(ledger, db.payments()), args.out)
+            print(f"Results written to {args.out}")
         return 0
     finally:
         db.close()

@@ -16,6 +16,14 @@ from dotenv import load_dotenv
 
 from invoice_agents.batch import collect_files, run_new, split_loaded
 from invoice_agents.db import Database
+from invoice_agents.export import (
+    compare_expected,
+    expected_template,
+    result_rows,
+    summary_line,
+    to_csv,
+    to_json,
+)
 from invoice_agents.graph import Context, process_invoice
 from invoice_agents.llm.client import LLMUnavailable, make_client
 from invoice_agents.presentation import (
@@ -146,9 +154,15 @@ def metric(label: str, value: str) -> str:
 # ---------------------------------------------------------------------------- settings
 
 
+def session_key() -> str:
+    """The key typed in Settings. It lives in this browser session's state only: never in the
+    environment, on disk, in the database or in a log."""
+    return str(st.session_state.get("xai_api_key") or "").strip()
+
+
 def has_api_key() -> bool:
     load_dotenv()
-    return bool(os.environ.get("LLM_API_KEY", "").strip())
+    return bool(session_key() or os.environ.get("LLM_API_KEY", "").strip())
 
 
 def reset_database() -> None:
@@ -176,7 +190,16 @@ def settings_popover() -> str:
             label_visibility="collapsed",
         )
         if not key_ok:
-            st.caption("Live Grok is unavailable: no API key is configured (see .env.example).")
+            st.caption("Live Grok is unavailable: add a key below or in .env (see .env.example).")
+        st.text_input(
+            "xAI API key (optional)",
+            type="password",
+            key="xai_api_key",
+            placeholder="xai-...",
+            help="Auto mode uses recorded responses first, then live Grok with this key, "
+            "then rules only.",
+        )
+        st.caption("Used for this browser session only; never saved.")
         st.divider()
         if not st.session_state.get("confirm_reset"):
             if st.button("Reset database", use_container_width=True):
@@ -195,7 +218,7 @@ def settings_popover() -> str:
 
 def client_for(mode: str):
     try:
-        return make_client(mode, CACHE_DIR)
+        return make_client(mode, CACHE_DIR, api_key=session_key() or None)
     except LLMUnavailable as exc:
         st.error(f"The AI engine is not available: {exc}")
         return None
@@ -489,6 +512,60 @@ def tab_dashboard(mode: str) -> None:
         )
     else:
         st.caption("No invoices match these filters.")
+    export_rows = result_rows(rows, payments)
+    d1, d2, _ = st.columns([1.3, 1.3, 4])
+    d1.download_button(
+        "Download results (CSV)",
+        to_csv(export_rows),
+        file_name="invoice_results.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+    d2.download_button(
+        "Download results (JSON)",
+        to_json(export_rows),
+        file_name="invoice_results.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+    check_expected(export_rows)
+
+
+def check_expected(export_rows: list[dict]) -> None:
+    """Compare the processed invoices with a CSV of expected decisions (file,expected_decision)."""
+    with st.expander("Check against expected"):
+        st.caption(
+            "Upload a CSV with the columns file and expected_decision. Files are matched by "
+            "name; case and spacing in the decision are ignored."
+        )
+        st.download_button(
+            "Download expected-results template",
+            expected_template([r["file"] for r in export_rows]),
+            file_name="expected_results_template.csv",
+            mime="text/csv",
+        )
+        up = st.file_uploader("Expected results (CSV)", type=["csv"], key="expected_csv")
+        if up is None:
+            return
+        try:
+            cmp = compare_expected(export_rows, up.getvalue().decode("utf-8", errors="replace"))
+        except ValueError as exc:
+            st.error(str(exc))
+            return
+        st.markdown(f"**{summary_line(cmp)}**")
+        if cmp["rows"]:
+            table = [
+                {
+                    "File": r["file"],
+                    "Expected": r["expected"] or "—",
+                    "Actual": r["actual"],
+                    "Match": "✓" if r["match"] else "✗",
+                }
+                for r in cmp["rows"]
+            ]
+            st.markdown(html_table(table, nowrap=("Match",)), unsafe_allow_html=True)
+        if cmp["not_processed"]:
+            st.warning("Expected but not processed: " + ", ".join(cmp["not_processed"]))
 
 
 # ---------------------------------------------------------------------------- review queue

@@ -127,5 +127,38 @@ rules_only or code). `paid` is yes only for a row whose final decision is APPROV
 key was sent, so a duplicate never shows as paid. The expected-results comparison matches by file
 name (basename, case-insensitive), ignores case and spacing in decisions, rejects a CSV without
 the `file` and `expected_decision` columns, and lists expected files that were not processed. A
-file called `expected_results.csv` is never collected as an invoice. The UI API key lives only in
-the session state and is passed to the client as an argument; it is not put in the environment.
+file called `expected_results.csv` is never collected as an invoice. (An earlier version had a
+session-only API key field in the UI; see #18, it was removed.)
+
+## 17. Missing invoice number: reject only when confidently absent
+Our policy, not a requirement of the brief. Without a number there is no idempotency key
+(vendor + number), so the same invoice could be paid twice. So an invoice with no number never
+pays. Whether it is a REJECT or a HOLD depends on how sure we are that the number is absent:
+- REJECT (`missing_invoice_number`): confidently absent. A JSON, CSV or XML file without the field
+  or with it empty (invoice_9015), or a text/PDF extraction that is otherwise complete and whose
+  text carries no invoice-number label with a value (including a label left blank).
+- HOLD (`invoice_number_unreadable`, a system issue): the text shows an invoice-number label with
+  a value, but extraction found no number (a label style the rules cannot read, or a model that
+  returned null). A person must check the document and confirm the number. A reviewer still
+  cannot approve and pay it, because no payment key can be formed.
+Extraction that is uncertain for any other reason already holds (`extraction_failed`). Tests for
+both branches and for the blank-label case are in `tests/test_release_gates.py`. The check found
+a latent bug: the label-based extractor read across lines, so `Invoice Number:` left blank took
+the next line's word ("Date") as the number; it now stays on the line.
+
+## 18. Release gates
+- Payment guard: `pay_invoice` itself refuses without vendor, invoice number (a complete key),
+  an amount above zero, or USD, whatever the approval step said. Before this check the graph's
+  pay step asserted vendor and total only and would have used a key like `vendor|None` if the
+  approval step were ever forced to APPROVE. The manual path re-checks `approval_eligibility`
+  inside `review_hold`, not only in the button state.
+- Live mode never reads the cache; a rejected key is a HOLD with `llm_unavailable`. Auto mode
+  replays a recorded response without using the key (by design) and holds on a miss with a
+  rejected key. xAI answers an invalid key with HTTP 400, not 401; every API failure is handled
+  the same way and only the exception type name is kept.
+- The session-only API key field in the UI was removed. One live attempt from the UI with the
+  owner's key was rejected by the provider, so the feature could not be shown to work. The key
+  now comes from the environment or `.env` only. Leak tests run the UI against a local stub that
+  echoes the credential and assert it appears in no database file, cache file, log, export or
+  page text.
+- Scope of "0 invalid payments": see the README Results section.

@@ -44,13 +44,12 @@ class Decision(StrEnum):
     DUPLICATE = "DUPLICATE"
 
 
-# Execution findings describe the system failing to do its job (no LLM, missing or stale fixture,
+# Execution findings describe the system failing to do its job (no LLM, missing cache entry,
 # extraction or mapping not completed). They are never a vendor or invoice defect.
 EXECUTION_CODES = frozenset(
     {
         "llm_unavailable",
-        "fixture_missing",
-        "fixture_stale",
+        "cache_missing",
         "extraction_failed",
         "item_needs_mapping",
         "critic_unresolved",

@@ -1,21 +1,26 @@
-"""LLM access behind one small interface.
+"""LLM access: one client, two transports.
 
-Three ways to get an LLM result, always labelled with a provenance:
+* ``live``  calls the model (xAI Grok through the OpenAI SDK, Responses API) and writes every
+            response to the cache.
+* ``cache`` replays recorded responses only; a missing entry raises CacheMiss (the pipeline
+            turns that into a HOLD with a system issue).
+* ``none``  means no client at all: callers take their code-only paths.
 
-* ``live``      a real model call (LiveClient)
-* ``authored``  a fixture file hand-written by us (FixtureClient); NOT a model output
-* ``recorded``  a captured real response replayed from a fixture file (FixtureClient)
-
-``--llm none`` means no client at all: callers take their code-only paths.
+Cache entries live at ``cache/llm/<step>/<doc-fingerprint16>-<request-hash12>.json`` and hold the
+response plus provenance ``recorded``. The request hash covers the exact messages, schema, tools,
+model and settings, so a changed prompt, schema or input is simply a different (missing) entry.
+No secrets are ever written to the cache.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -23,36 +28,24 @@ from pydantic import BaseModel, ValidationError
 
 from ..config import MAX_TOOL_ITERATIONS
 from ..logs import jlog
-from .compat import compat_meta, mismatches
 
 T = TypeVar("T", bound=BaseModel)
 
-VALID_FIXTURE_PROVENANCE = {"authored", "recorded"}
+PRICE_IN_PER_M = 1.25  # grok-4.3, USD per million input tokens
+PRICE_OUT_PER_M = 2.50  # output tokens, including reasoning tokens
+BUDGET_STOP_USD = 2.50
 
 
 class LLMUnavailable(RuntimeError):
-    """No usable LLM result (no key, missing fixture, API failure); the pipeline HOLDs on it."""
+    """No usable LLM result (no key, cache miss, API failure); the pipeline HOLDs on it."""
 
 
-class FixtureError(LLMUnavailable):
-    """A fixture file exists but is malformed or lacks a valid provenance label."""
+class CacheMiss(LLMUnavailable):
+    """No recorded response for this exact request."""
 
 
-class FixtureMissing(LLMUnavailable):
-    """No fixture file exists for this agent, document and step."""
-
-
-class FixtureStale(FixtureError):
-    """A fixture exists but was made for a different prompt, schema, input or settings."""
-
-
-def failure_code(exc: BaseException) -> str:
-    """Execution-failure code for an LLM-side exception."""
-    if isinstance(exc, FixtureMissing):
-        return "fixture_missing"
-    if isinstance(exc, FixtureStale):
-        return "fixture_stale"
-    return "llm_unavailable"
+class BudgetExceeded(LLMUnavailable):
+    """The estimated live spend reached the stop limit."""
 
 
 class SchemaValidationFailed(Exception):
@@ -64,21 +57,23 @@ class SchemaValidationFailed(Exception):
         self.raw = raw
 
 
+def failure_code(exc: BaseException) -> str:
+    return "cache_missing" if isinstance(exc, CacheMiss) else "llm_unavailable"
+
+
 @dataclass
 class Tool:
     name: str
     description: str
-    parameters: dict[str, Any]  # JSON schema for the arguments
+    parameters: dict[str, Any]
     fn: Callable[..., Any]
 
     def spec(self) -> dict[str, Any]:
         return {
             "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters,
         }
 
 
@@ -89,18 +84,237 @@ class ToolRoundResult:
     tool_trace: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _run_tool(tools: dict[str, Tool], name: str, arguments: dict[str, Any]) -> Any:
-    tool = tools.get(name)
-    if tool is None:
-        return {"error": f"unknown tool {name!r}"}
-    try:
-        return tool.fn(**arguments)
-    except Exception as exc:  # tool errors go back to the model, they do not crash the run
-        return {"error": f"{type(exc).__name__}: {exc}"}
+@dataclass
+class ModelTurn:
+    """One model response: final text and/or tool calls (each {id, name, arguments-json-str})."""
+
+    content: str | None
+    tool_calls: list[dict[str, str]] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
-class LLMClient(ABC):
+def settings_for(agent: str) -> dict[str, Any]:
+    """Extraction needs no reasoning; the judgment steps use low effort."""
+    return {"reasoning_effort": "none" if agent == "extraction" else "low"}
+
+
+def request_hash(
+    agent: str,
+    messages: list[dict[str, Any]],
+    schema_model: type[BaseModel],
+    tools: list[Tool] | None,
+    model: str,
+) -> str:
+    payload = {
+        "agent": agent,
+        "messages": messages,
+        "schema": schema_model.model_json_schema(),
+        "tools": [t.spec() for t in tools or []],
+        "model": model,
+        "settings": settings_for(agent),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[
+        :12
+    ]
+
+
+def cost_usd(usage: dict[str, Any]) -> float:
+    return (
+        usage.get("input_tokens", 0) * PRICE_IN_PER_M
+        + usage.get("output_tokens", 0) * PRICE_OUT_PER_M
+    ) / 1_000_000
+
+
+def cache_spend(root: Path) -> float:
+    """Estimated total spend recorded in the cache (every entry stores its own estimate)."""
+    total = 0.0
+    for p in root.rglob("*.json"):
+        try:
+            total += float(json.loads(p.read_text()).get("usage", {}).get("cost_usd_estimate", 0.0))
+        except (ValueError, OSError):
+            continue
+    return total
+
+
+class Transport(ABC):
+    provenance: str
+    model: str
+
     @abstractmethod
+    def call(
+        self,
+        agent: str,
+        key: str | None,
+        messages: list[dict[str, Any]],
+        schema_model: type[BaseModel],
+        tools: list[Tool] | None,
+    ) -> ModelTurn: ...
+
+
+def _path(root: Path, agent: str, key: str | None, rhash: str) -> Path:
+    return root / agent / f"{key or 'nokey'}-{rhash}.json"
+
+
+class CacheTransport(Transport):
+    provenance = "recorded"
+
+    def __init__(self, root: str | Path, model: str):
+        self.root, self.model = Path(root), model
+
+    def call(self, agent, key, messages, schema_model, tools):
+        rhash = request_hash(agent, messages, schema_model, tools, self.model)
+        path = _path(self.root, agent, key, rhash)
+        if not path.exists():
+            raise CacheMiss(f"no cached response for {agent} ({path.name})")
+        data = json.loads(path.read_text())
+        if data.get("provenance") != "recorded":
+            raise CacheMiss(f"{path.name} is not a recorded response")
+        r = data["response"]
+        return ModelTurn(r.get("content"), r.get("tool_calls", []), data.get("usage", {}))
+
+
+def _to_responses_input(messages: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]]]:
+    """Chat-style messages -> (instructions, Responses API input items)."""
+    instructions = None
+    items: list[dict[str, Any]] = []
+    for m in messages:
+        role = m["role"]
+        if role == "system" and instructions is None:
+            instructions = m["content"]
+        elif role == "tool":
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": m["tool_call_id"],
+                    "output": m["content"],
+                }
+            )
+        elif role == "assistant" and m.get("tool_calls"):
+            if m.get("content"):
+                items.append({"role": "assistant", "content": m["content"]})
+            for tc in m["tool_calls"]:
+                items.append(
+                    {
+                        "type": "function_call",
+                        "call_id": tc["id"],
+                        "name": tc["function"]["name"],
+                        "arguments": tc["function"]["arguments"],
+                    }
+                )
+        else:
+            items.append({"role": role, "content": m["content"]})
+    return instructions, items
+
+
+class LiveTransport(Transport):
+    """xAI Grok through the OpenAI SDK, Responses API with structured outputs.
+
+    Never sends presence_penalty, frequency_penalty or stop. Writes each response to the cache.
+    The API key is read from the environment only and is never logged or stored.
+    """
+
+    provenance = "live"
+
+    def __init__(self, api_key: str, base_url: str, model: str, cache_root: str | Path):
+        from openai import OpenAI
+
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self.model = model
+        self.root = Path(cache_root)
+        self.session_cost = 0.0
+        self._base_spend = cache_spend(self.root)
+
+    def call(self, agent, key, messages, schema_model, tools):
+        if self._base_spend + self.session_cost >= BUDGET_STOP_USD:
+            raise BudgetExceeded(
+                f"estimated spend ${self._base_spend + self.session_cost:.2f} reached the "
+                f"${BUDGET_STOP_USD:.2f} stop limit"
+            )
+        rhash = request_hash(agent, messages, schema_model, tools, self.model)
+        instructions, items = _to_responses_input(messages)
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "input": items,
+            "reasoning": {"effort": settings_for(agent)["reasoning_effort"]},
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_model.__name__,
+                    "schema": schema_model.model_json_schema(),
+                }
+            },
+        }
+        if instructions:
+            kwargs["instructions"] = instructions
+        if tools:
+            kwargs["tools"] = [t.spec() for t in tools]
+        try:
+            resp = self._client.responses.create(**kwargs)
+        except Exception as exc:
+            raise LLMUnavailable(f"API call failed: {type(exc).__name__}") from exc
+        calls = [
+            {"id": o.call_id, "name": o.name, "arguments": o.arguments}
+            for o in resp.output
+            if o.type == "function_call"
+        ]
+        content = None if calls else resp.output_text
+        u = resp.usage
+        usage = {
+            "input_tokens": u.input_tokens,
+            "output_tokens": u.output_tokens,
+            "reasoning_tokens": u.output_tokens_details.reasoning_tokens,
+        }
+        usage["cost_usd_estimate"] = round(cost_usd(usage), 6)
+        self.session_cost += usage["cost_usd_estimate"]
+        jlog(
+            "llm_usage",
+            agent=agent,
+            model=self.model,
+            **usage,
+            running_estimate_usd=round(self._base_spend + self.session_cost, 4),
+        )
+        path = _path(self.root, agent, key, rhash)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "provenance": "recorded",
+                    "model": self.model,
+                    "recorded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                    "settings": settings_for(agent),
+                    "request": {
+                        "agent": agent,
+                        "messages": len(messages),
+                        "schema": schema_model.__name__,
+                        "tools": [t.name for t in tools or []],
+                    },
+                    "usage": usage,
+                    "response": {"content": content, "tool_calls": calls},
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        return ModelTurn(content, calls, usage)
+
+
+class LLMClient:
+    """Structured calls and a tool-calling loop on top of a transport."""
+
+    def __init__(self, transport: Transport):
+        self.transport = transport
+
+    @property
+    def provenance(self) -> str:
+        return self.transport.provenance
+
+    @staticmethod
+    def _validate(schema_model: type[T], text: str) -> T:
+        try:
+            return schema_model.model_validate_json(text)
+        except ValidationError as exc:
+            raise SchemaValidationFailed(str(exc), text) from exc
+
     def structured(
         self,
         agent: str,
@@ -108,12 +322,11 @@ class LLMClient(ABC):
         schema_model: type[T],
         *,
         key: str | None = None,
-        step: str = "",
-        prompt_hash: str | None = None,
     ) -> tuple[T, str]:
-        """One call returning a validated ``schema_model`` and its provenance label."""
+        turn = self.transport.call(agent, key, messages, schema_model, None)
+        jlog("llm_call", agent=agent, provenance=self.provenance)
+        return self._validate(schema_model, turn.content or ""), self.provenance
 
-    @abstractmethod
     def tool_call_round(
         self,
         agent: str,
@@ -123,263 +336,65 @@ class LLMClient(ABC):
         *,
         key: str | None = None,
         max_iterations: int = MAX_TOOL_ITERATIONS,
-        prompt_hash: str | None = None,
     ) -> ToolRoundResult:
         """Model emits tool calls, we execute them and feed results back, until it returns a
         final answer matching ``schema_model``. Capped at ``max_iterations`` model turns."""
-
-
-class LiveClient(LLMClient):
-    """OpenAI-compatible client (xAI Grok by default).
-
-    NOT EXERCISED: no API key was available when this was written, so this class has never made
-    a real call. It is written against the openai SDK's documented chat-completions interface.
-    Reasoning effort is "none" for extraction and "low" for everything else. presence_penalty,
-    frequency_penalty and stop are never sent (reasoning models reject them).
-    """
-
-    def __init__(self, api_key: str, base_url: str, model: str):
-        from openai import OpenAI
-
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
-        self.model = model
-
-    @classmethod
-    def from_env(cls) -> LiveClient:
-        from dotenv import load_dotenv
-
-        load_dotenv()
-        key = os.environ.get("LLM_API_KEY", "").strip()
-        if not key:
-            raise LLMUnavailable("LLM_API_KEY is not set (see .env.example)")
-        return cls(
-            key,
-            os.environ.get("LLM_BASE_URL", "https://api.x.ai/v1"),
-            os.environ.get("LLM_MODEL", "grok-4.3"),
-        )
-
-    @staticmethod
-    def _effort(agent: str) -> str:
-        return "none" if agent == "extraction" else "low"
-
-    @staticmethod
-    def _response_format(schema_model: type[BaseModel]) -> dict[str, Any]:
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": schema_model.__name__,
-                "schema": schema_model.model_json_schema(),
-            },
-        }
-
-    def _create(self, agent: str, messages: list[dict[str, Any]], schema_model, tools=None):
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "response_format": self._response_format(schema_model),
-            "reasoning_effort": self._effort(agent),
-        }
-        if tools:
-            kwargs["tools"] = [t.spec() for t in tools]
-        try:
-            return self._client.chat.completions.create(**kwargs)
-        except Exception as exc:
-            raise LLMUnavailable(f"API call failed: {type(exc).__name__}: {exc}") from exc
-
-    @staticmethod
-    def _validate(schema_model: type[T], text: str) -> T:
-        try:
-            return schema_model.model_validate_json(text)
-        except ValidationError as exc:
-            raise SchemaValidationFailed(str(exc), text) from exc
-
-    def structured(self, agent, messages, schema_model, *, key=None, step="", prompt_hash=None):
-        resp = self._create(agent, messages, schema_model)
-        obj = self._validate(schema_model, resp.choices[0].message.content or "")
-        jlog("llm_call", agent=agent, step=step, provenance="live", model=self.model)
-        return obj, "live"
-
-    def tool_call_round(
-        self,
-        agent,
-        messages,
-        tools,
-        schema_model,
-        *,
-        key=None,
-        max_iterations=MAX_TOOL_ITERATIONS,
-        prompt_hash=None,
-    ):
         by_name = {t.name: t for t in tools}
         msgs = list(messages)
         trace: list[dict[str, Any]] = []
-        for turn in range(max_iterations):
-            resp = self._create(agent, msgs, schema_model, tools)
-            msg = resp.choices[0].message
-            if not msg.tool_calls:
-                obj = self._validate(schema_model, msg.content or "")
-                jlog("llm_call", agent=agent, step=f"turn{turn}", provenance="live")
-                return ToolRoundResult(obj, "live", trace)
+        for _ in range(max_iterations):
+            turn = self.transport.call(agent, key, msgs, schema_model, tools)
+            jlog("llm_call", agent=agent, provenance=self.provenance)
+            if not turn.tool_calls:
+                obj = self._validate(schema_model, turn.content or "")
+                return ToolRoundResult(obj, self.provenance, trace)
             msgs.append(
                 {
                     "role": "assistant",
-                    "content": msg.content,
+                    "content": turn.content,
                     "tool_calls": [
                         {
-                            "id": tc.id,
+                            "id": c["id"],
                             "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            },
+                            "function": {"name": c["name"], "arguments": c["arguments"]},
                         }
-                        for tc in msg.tool_calls
+                        for c in turn.tool_calls
                     ],
                 }
             )
-            for tc in msg.tool_calls:
+            for c in turn.tool_calls:
                 try:
-                    args = json.loads(tc.function.arguments or "{}")
+                    args = json.loads(c["arguments"] or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                result = _run_tool(by_name, tc.function.name, args)
-                trace.append({"tool": tc.function.name, "arguments": args, "result": result})
+                tool = by_name.get(c["name"])
+                try:
+                    result = tool.fn(**args) if tool else {"error": f"unknown tool {c['name']!r}"}
+                except Exception as exc:
+                    result = {"error": f"{type(exc).__name__}: {exc}"}
+                trace.append({"tool": c["name"], "arguments": args, "result": result})
                 msgs.append(
                     {
                         "role": "tool",
-                        "tool_call_id": tc.id,
+                        "tool_call_id": c["id"],
                         "content": json.dumps(result, default=str),
                     }
                 )
         raise LLMUnavailable(f"{agent}: no final answer within {max_iterations} tool iterations")
 
 
-class FixtureClient(LLMClient):
-    """Replays JSON fixtures from ``<root>/<agent>/<key>[__<step>].json``.
+def make_client(mode: str, cache_dir: str | Path = "cache/llm") -> LLMClient | None:
+    """``none`` -> None. ``cache`` -> replay only. ``live`` -> real calls that fill the cache."""
+    from dotenv import load_dotenv
 
-    Every fixture must carry ``"provenance": "authored"`` (hand-written, not a model output) or
-    ``"recorded"`` (a captured real response). A fixture without a valid provenance is refused.
-    The returned provenance is whatever the file declares. Multi-turn tool rounds use
-    ``<key>__turn0.json``, ``<key>__turn1.json``, ...: a turn holds either ``tool_calls`` (which
-    this client really executes against the supplied tools) or the final ``response``.
-
-    Compatibility: each fixture stores ``meta`` (prompt, schema and input hashes, model, settings).
-    With ``verify=True`` (the default) any mismatch raises FixtureStale, so a fixture written for
-    something else is never silently used. ``verify=False`` is for tests that build ad-hoc
-    fixtures. ``stamp=True`` (used by ``invoice_agents.record stamp``) writes the current
-    compatibility metadata into the fixtures instead of verifying it.
-    """
-
-    def __init__(
-        self,
-        root: str | Path = "fixtures/llm",
-        *,
-        verify: bool = True,
-        stamp: bool = False,
-        expected_model: str | None = None,
-    ):
-        self.root = Path(root)
-        self.verify = verify
-        self.stamp = stamp
-        self.expected_model = expected_model
-        self.current_source: str | None = None
-        self.loaded: list[str] = []  # relative fixture paths consumed
-        self.stamped: list[dict[str, Any]] = []
-
-    def _load(
-        self,
-        agent: str,
-        key: str | None,
-        suffix: str,
-        messages: list[dict[str, Any]],
-        schema_model: type[BaseModel],
-        prompt: str | None,
-    ) -> dict[str, Any]:
-        if not key:
-            raise LLMUnavailable(f"{agent}: no fixture key given")
-        path = self.root / agent / f"{key}{suffix}.json"
-        rel = f"{agent}/{key}{suffix}.json"
-        if not path.exists():
-            raise FixtureMissing(f"no fixture for {rel}")
-        try:
-            data = json.loads(path.read_text())
-        except json.JSONDecodeError as exc:
-            raise FixtureError(f"{rel} is not valid JSON: {exc}") from exc
-        prov = data.get("provenance") if isinstance(data, dict) else None
-        if prov not in VALID_FIXTURE_PROVENANCE:
-            raise FixtureError(
-                f"{rel} refused: missing or invalid 'provenance' (need one of "
-                f"{sorted(VALID_FIXTURE_PROVENANCE)}, got {prov!r})"
-            )
-        current = compat_meta(agent, messages, schema_model, prompt, "authored")
-        if self.stamp:
-            meta = {
-                **current,
-                "model": "authored" if prov == "authored" else data.get("meta", {}).get("model"),
-            }
-            ordered = {k: v for k, v in data.items() if k not in ("meta", "response", "tool_calls")}
-            ordered["meta"] = meta
-            for k in ("response", "tool_calls"):
-                if k in data:
-                    ordered[k] = data[k]
-            path.write_text(json.dumps(ordered, indent=2) + "\n")
-            self.stamped.append(
-                {"path": rel, "agent": agent, "step": suffix.lstrip("_") or "initial",
-                 "source_file": self.current_source, "provenance": prov, **meta}
-            )  # fmt: skip
-        elif self.verify:
-            bad = mismatches(data.get("meta"), current, self.expected_model)
-            if bad:
-                raise FixtureStale(
-                    f"{rel} is stale or incompatible with the current run: {', '.join(bad)} differ"
-                )
-        self.loaded.append(rel)
-        return data
-
-    @staticmethod
-    def _validate(schema_model: type[T], payload: Any) -> T:
-        try:
-            return schema_model.model_validate(payload)
-        except ValidationError as exc:
-            raise SchemaValidationFailed(str(exc), json.dumps(payload)) from exc
-
-    def structured(self, agent, messages, schema_model, *, key=None, step="", prompt_hash=None):
-        suffix = f"__{step}" if step else ""
-        data = self._load(agent, key, suffix, messages, schema_model, prompt_hash)
-        prov = data["provenance"]
-        jlog("llm_call", agent=agent, step=step, provenance=prov, key=key)
-        return self._validate(schema_model, data.get("response")), prov
-
-    def tool_call_round(
-        self,
-        agent,
-        messages,
-        tools,
-        schema_model,
-        *,
-        key=None,
-        max_iterations=MAX_TOOL_ITERATIONS,
-        prompt_hash=None,
-    ):
-        by_name = {t.name: t for t in tools}
-        trace: list[dict[str, Any]] = []
-        prov = "authored"
-        for turn in range(max_iterations):
-            data = self._load(agent, key, f"__turn{turn}", messages, schema_model, prompt_hash)
-            prov = data["provenance"]
-            jlog("llm_call", agent=agent, step=f"turn{turn}", provenance=prov, key=key)
-            calls = data.get("tool_calls")
-            if not calls:
-                return ToolRoundResult(
-                    self._validate(schema_model, data.get("response")), prov, trace
-                )
-            for call in calls:
-                args = call.get("arguments", {})
-                trace.append(
-                    {
-                        "tool": call["name"],
-                        "arguments": args,
-                        "result": _run_tool(by_name, call["name"], args),
-                    }
-                )
-        raise LLMUnavailable(f"{agent}: no final answer within {max_iterations} tool iterations")
+    if mode == "none":
+        return None
+    load_dotenv()
+    model = os.environ.get("LLM_MODEL", "grok-4.3")
+    if mode == "cache":
+        return LLMClient(CacheTransport(cache_dir, model))
+    key = os.environ.get("LLM_API_KEY", "").strip()
+    if not key:
+        raise LLMUnavailable("LLM_API_KEY is not set (see .env.example)")
+    base = os.environ.get("LLM_BASE_URL", "https://api.x.ai/v1")
+    return LLMClient(LiveTransport(key, base, model, cache_dir))

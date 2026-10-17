@@ -1,8 +1,10 @@
-"""Thin Streamlit front end. All processing goes through the same functions as the CLI
-(make_client, process_invoice, run_batch, review_hold); this file only renders results."""
+"""Streamlit front end. All processing goes through the same functions as the CLI
+(make_client, process_invoice, run_batch, review_hold, evaluate); this file only renders results.
+Layout and colors follow the design mockup: warm neutrals, soft cards, pill status badges."""
 
 from __future__ import annotations
 
+import html
 import os
 import tempfile
 from pathlib import Path
@@ -11,20 +13,17 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from invoice_agents.batch import collect_files, result_record, run_batch
-from invoice_agents.cli import make_client
 from invoice_agents.db import Database
-from invoice_agents.evaluation import CLASSES, counts, evaluate
-from invoice_agents.graph import TIER_TEXT, Context, process_invoice
-from invoice_agents.llm.client import LLMUnavailable
+from invoice_agents.evaluation import evaluate
+from invoice_agents.graph import Context, process_invoice
+from invoice_agents.llm.client import LLMUnavailable, make_client
 from invoice_agents.presentation import (
-    SEVERITY_BADGE,
     decision_badge,
-    decision_label,
-    key_codes,
+    extracted_lines,
     money,
-    paid_text,
     plain,
     provenance_label,
+    timeline,
 )
 from invoice_agents.review import (
     ReviewError,
@@ -36,334 +35,363 @@ from invoice_agents.review import (
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_DIRS = [ROOT / "data" / "invoices", ROOT / "data" / "synthetic"]
-FIXTURES = str(ROOT / "fixtures" / "llm")
+DB_PATH = os.environ.get("ACME_UI_DB", str(ROOT / "acme_ui.db"))
+CACHE_DIR = ROOT / "cache" / "llm"
+
+CSS = """
+<style>
+.stApp { background: #fcfcfb; }
+html, body, [class*="st-"] { font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+.card { background:#f9f9f7; border:0.5px solid #e4e3dd; border-radius:12px; padding:1rem 1.25rem;
+        margin-bottom:10px; color:#20201f; }
+.card.ok { border-color:#aee0a9; } .card.hold { border-color:#f9c868; }
+.card.no { border-color:#f4abab; } .card.dup { border-color:#c3c2b7; }
+.pill { font-size:13px; padding:3px 10px; border-radius:8px; white-space:nowrap; font-weight:500; }
+.pill.ok { background:#e5f4e4; color:#074506; } .pill.hold { background:#f9eeda; color:#734500; }
+.pill.no { background:#fbebeb; color:#8e2626; } .pill.dup { background:#f3f3f0; color:#52514e; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.big { font-size:24px; font-weight:500; } .who { margin:10px 0 2px; font-size:15px; font-weight:500; }
+.why { margin:0; font-size:14px; color:#6d6b67; }
+.step { display:flex; gap:10px; font-size:14px; padding:5px 0; color:#20201f; }
+.step .i { width:20px; text-align:center; font-weight:600; }
+.step .check { color:#074506; } .step .warn { color:#734500; }
+.step .fail { color:#8e2626; } .step .dash { color:#97958d; }
+.m { background:#f3f3f0; border-radius:8px; padding:10px 12px; }
+.m .k { font-size:12px; color:#6d6b67; margin:0; } .m .v { font-size:20px; font-weight:500; margin:0; }
+.lbl { font-size:12px; color:#6d6b67; margin:1rem 0 6px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:12px; white-space:pre-wrap; }
+</style>
+"""
+
+TONE = {"APPROVE": "ok", "HOLD": "hold", "REJECT": "no", "DUPLICATE": "dup"}
+ICON = {"check": "✓", "warn": "⚠", "fail": "✗", "dash": "—"}
+ICON_WORD = {"check": "done", "warn": "needs attention", "fail": "failed", "dash": "not applicable"}
+
+
+def esc(x) -> str:
+    return html.escape(str(x))
 
 
 def sample_files() -> list[Path]:
     return collect_files(SAMPLE_DIRS)
 
 
-def open_db(path: str) -> Database:
-    return Database(path)
+def pill(decision: str, big: bool = False) -> str:
+    style = ' style="font-size:15px;padding:4px 12px"' if big else ""
+    return f'<span class="pill {TONE[decision]}"{style}>{esc(decision_badge(decision))}</span>'
 
 
-def render_sidebar() -> tuple[str, str]:
+def metric(label: str, value: str) -> str:
+    return f'<div class="m"><p class="k">{esc(label)}</p><p class="v">{esc(value)}</p></div>'
+
+
+# ---------------------------------------------------------------------------- sidebar
+
+
+def sidebar() -> str:
     load_dotenv()
-    st.sidebar.header("Settings")
     has_key = bool(os.environ.get("LLM_API_KEY", "").strip())
-    modes = ["fixture", "none", "live"]
+    st.sidebar.header("Acme invoice agents")
+    modes = ["cache", "none"] + (["live"] if has_key else [])
     mode = st.sidebar.selectbox(
         "LLM mode",
         modes,
-        help="fixture: replay hand-written (authored) fixtures. none: code only. live: real model.",
+        help="cache: replay recorded Grok responses. none: code only. live: call Grok (costs money).",
     )
-    if mode == "live" and not has_key:
-        st.sidebar.error("Live mode is unavailable: LLM_API_KEY is not set (see .env.example).")
-    db_path = st.sidebar.text_input("Database path", value=str(ROOT / "acme_ui.db"))
+    if not has_key:
+        st.sidebar.caption("Live is unavailable: no API key is set.")
     if st.sidebar.button("Reset database"):
         st.session_state["confirm_reset"] = True
     if st.session_state.get("confirm_reset"):
-        st.sidebar.warning("This wipes the ledger, payments, reviews and audit trail.")
-        if st.sidebar.button("Yes, reset the database now"):
-            db = open_db(db_path)
+        st.sidebar.warning("This wipes the ledger, payments and reviews.")
+        if st.sidebar.button("Yes, reset now"):
+            db = Database(DB_PATH)
             db.reset()
             db.close()
+            for k in ("last_result", "dashboard", "confirm_reset"):
+                st.session_state.pop(k, None)
+            st.sidebar.success("Database reset.")
+        if st.sidebar.button("Cancel"):
             st.session_state["confirm_reset"] = False
-            st.session_state.pop("last_result", None)
-            st.sidebar.success("Database reset and reseeded.")
-        if st.sidebar.button("Cancel reset"):
-            st.session_state["confirm_reset"] = False
-    return mode, db_path
+    return mode
 
 
-def get_client(mode: str):
+def client_for(mode: str):
     try:
-        return make_client(mode, FIXTURES)
+        return make_client(mode, CACHE_DIR)
     except LLMUnavailable as exc:
-        st.error(f"LLM unavailable: {exc}")
+        st.error(f"The LLM is not available: {exc}")
         return None
 
 
-def _tagged(f) -> str:
-    d = f.model_dump()
-    return f"{plain(d)}  `{d['code']}`"
+# ---------------------------------------------------------------------------- process
 
 
-def render_result(state, ctx_info: dict | None = None) -> None:
-    decision = state["decision"].value
-    findings_all = state.get("findings", [])
-    st.subheader(f"Decision: {decision_badge(decision)}")
-    label = decision_label(decision, findings_all)
-    if label != decision:
-        st.write(label)
-    pay = state.get("payment")
-    if pay and pay["status"] == "paid":
-        st.write(
-            f"Payment: paid {money(pay['amount'], pay.get('currency', 'USD'))} to {pay['vendor']}"
+def decision_card(rec: dict) -> str:
+    d = rec["decision"]
+    cur = rec["currency"] or "USD"
+    who = " · ".join(x for x in (rec["vendor"], rec["invoice_number"]) if x) or "Unknown vendor"
+    return (
+        f'<div class="card {TONE[d]}"><div class="row">{pill(d, True)}'
+        f'<span class="big">{esc(money(rec["total"], cur))}</span></div>'
+        f'<p class="who">{esc(who)}</p><p class="why">{esc(rec["reason"])}</p></div>'
+    )
+
+
+def render_timeline(state: dict) -> None:
+    rows = "".join(
+        f'<div class="step"><span class="i {s["icon"]}" aria-label="{ICON_WORD[s["icon"]]}">'
+        f"{ICON[s['icon']]}</span><span><b>{esc(s['step'])}</b> · {esc(s['line'])}</span></div>"
+        for s in timeline(state)
+    )
+    st.markdown(f'<div style="margin-top:6px">{rows}</div>', unsafe_allow_html=True)
+
+
+def render_result(state: dict, rec: dict) -> None:
+    st.markdown(decision_card(rec), unsafe_allow_html=True)
+    render_timeline(state)
+    left, right = st.columns(2)
+    text = state["doc"].raw_text
+    with left:
+        st.markdown('<div class="lbl">Source document</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="m mono">{esc(text[:1800])}{"…" if len(text) > 1800 else ""}</div>',
+            unsafe_allow_html=True,
         )
-        if pay.get("output"):
-            st.caption(f"mock_payment output: {pay['output']}")
-    elif pay:
-        st.write(f"Payment: not made ({pay['status']}: {pay['detail']})")
-    else:
-        st.write("Payment: none")
-
-    sys_issues = [f for f in findings_all if f.kind == "execution" and f.severity != "note"]
-    if sys_issues:
-        st.markdown("**\U0001f6e0\ufe0f System issues (not vendor or invoice defects)**")
-        for f in sys_issues:
-            st.markdown(f"- {_tagged(f)}")
-    st.markdown("**Business findings**")
-    shown = False
-    for sev in ("reject", "hold", "note"):
-        items = [f for f in findings_all if f.kind == "business" and f.severity == sev]
-        if items:
-            shown = True
-            st.markdown(SEVERITY_BADGE[sev])
-            for f in items:
-                st.markdown(f"- {_tagged(f)}")
-    if not shown:
-        st.write("No business findings.")
-
-    inv = state.get("invoice")
-    res = state.get("resolve")
-    if inv:
-        cur = inv.currency
-        st.markdown("**Line items and resolved SKUs**")
-        rows = []
-        for i, li in enumerate(inv.line_items):
-            sku = res.proposed[i] if res else None
-            tier = res.tiers[i] if res else "unresolved"
-            rows.append(
-                {
-                    "Item as written": li.raw_name,
-                    "Resolved SKU": sku or "not resolved",
-                    "How": TIER_TEXT[tier],
-                    "Qty": li.quantity,
-                    "Unit price": money(li.unit_price, cur),
-                    "Line total": money(li.line_total, cur),
-                }
+    with right:
+        st.markdown('<div class="lbl">Extracted fields</div>', unsafe_allow_html=True)
+        body = "<br>".join(esc(x) for x in extracted_lines(state))
+        st.markdown(f'<div class="m" style="font-size:13px">{body}</div>', unsafe_allow_html=True)
+    if rec["decision"] == "REJECT" and rec["vendor_message"]:
+        with st.expander("Message to the vendor (template, not sent)"):
+            st.text(rec["vendor_message"])
+    with st.expander("Technical details"):
+        st.write(f"File: {state['path']}  \nFingerprint: {state['doc'].fingerprint}")
+        calls = state.get("llm_calls", [])
+        st.write(
+            "LLM steps: "
+            + (
+                ", ".join(f"{c['agent']} ({provenance_label(c.get('provenance'))})" for c in calls)
+                or provenance_label("code")
             )
-        st.dataframe(rows, use_container_width=True)
-        st.write(
-            f"Subtotal {money(inv.subtotal, cur)}, tax {money(inv.tax, cur)}, "
-            f"total {money(inv.total, cur)}"
         )
-
-    st.markdown("**Step-by-step trace**")
-    for i, step in enumerate(state["steps"], 1):
-        with st.expander(
-            f"{i}. {step['step']}", expanded=step["step"] in ("ingest", "resolve_items")
-        ):
-            for line in step["lines"]:
-                st.text(line)
-    if res and res.tool_trace:
-        with st.expander("search_inventory tool calls"):
+        for f in state.get("findings", []):
+            st.write(f"- {plain(f)}  `{f.code}` ({f.severity}, {f.kind})")
+        for step in state["steps"]:
+            st.text(step["step"] + "\n  " + "\n  ".join(step["lines"]))
+        res = state.get("resolve")
+        if res and res.tool_trace:
             st.json(res.tool_trace)
 
-    st.markdown("**LLM provenance by step**")
-    calls = state.get("llm_calls", [])
-    if not calls:
-        st.write(f"- all steps: {provenance_label('code')}")
-    for c in calls:
-        label = provenance_label(c.get("provenance")) if c.get("provenance") else c.get("outcome")
-        st.write(f"- {c['agent']} / {c['step']}: {label}")
 
-    with st.expander("Developer details (collapsed by default)"):
-        if inv:
-            st.json(inv.model_dump(mode="json"))
-        st.write(f"Absolute path: {Path(state['path']).resolve()}")
-        st.write(f"Document fingerprint: {state['doc'].fingerprint}")
-        if ctx_info:
-            st.write(f"Run id: {ctx_info['run_id']}  |  Database: {ctx_info['db']}")
-
-
-def tab_process(mode: str, db_path: str) -> None:
-    source = st.radio("Invoice source", ["Sample file", "Upload a file"], horizontal=True)
-    path: str | None = None
-    if source == "Sample file":
+def tab_process(mode: str) -> None:
+    source = st.radio("Invoice source", ["Pick a sample", "Upload a file"], horizontal=True)
+    path = None
+    if source == "Pick a sample":
         files = sample_files()
-        choice = st.selectbox(
-            "Sample invoice", files, format_func=lambda p: f"{p.parent.name}/{p.name}"
-        )
-        path = str(choice)
+        path = str(st.selectbox("Sample invoice", files, format_func=lambda p: p.name))
     else:
         up = st.file_uploader("Invoice file", type=["txt", "pdf", "csv", "json", "xml"])
         if up is not None:
             tmp = Path(tempfile.mkdtemp(prefix="invoice_upload_")) / Path(up.name).name
             tmp.write_bytes(up.getvalue())  # temp dir only, never data/
             path = str(tmp)
-    if st.button(
-        "Run", disabled=path is None or (mode == "live" and not os.environ.get("LLM_API_KEY"))
-    ):
-        client = get_client(mode) if mode != "none" else None
+    if st.button("Run", disabled=path is None):
+        client = client_for(mode)
         if mode != "none" and client is None:
             return
-        db = open_db(db_path)
+        db = Database(DB_PATH)
         try:
             ctx = Context(db=db, client=client, llm_mode=mode)
             state = process_invoice(path, ctx)
-            st.session_state["last_result"] = (state, {"run_id": ctx.run_id, "db": db_path})
+            st.session_state["last_result"] = (state, result_record(state, ctx.run_id))
         finally:
             db.close()
     last = st.session_state.get("last_result")
     if last:
-        state, info = last
-        render_result(state, info)
+        render_result(*last)
 
 
-def tab_batch(mode: str, db_path: str) -> None:
-    fresh = st.checkbox("Reset the database before the batch", value=True)
-    st.caption("Order: data/invoices then data/synthetic, each sorted by file name.")
+# ---------------------------------------------------------------------------- dashboard
+
+
+def tab_dashboard(mode: str) -> None:
+    st.caption("Runs every sample invoice in the defined order against a fresh database.")
     if st.button("Run all samples"):
-        client = get_client(mode) if mode != "none" else None
+        client = client_for(mode)
         if mode != "none" and client is None:
             return
-        db = open_db(db_path)
+        db = Database(DB_PATH)
         try:
-            if fresh:
-                db.reset()
+            db.reset()
             results = run_batch(sample_files(), db, client, mode)
-            st.session_state["batch"] = [result_record(s, c.run_id) for s, c in results]
+            st.session_state["dashboard"] = [result_record(s, c.run_id) for s, c in results]
         finally:
             db.close()
-    rows = st.session_state.get("batch")
-    if rows:
-        st.dataframe(
-            [
-                {
-                    "File": Path(r["file"]).name,
-                    "Decision": decision_badge(r["decision"]),
-                    "Cause": r["cause"],
-                    "Key findings": key_codes(r),
-                    "Amount": money(r["total"], r["currency"] or "USD"),
-                    "Paid?": paid_text(r),
-                }
-                for r in rows
-            ],
-            use_container_width=True,
+    recs = st.session_state.get("dashboard")
+    if not recs:
+        st.write("Nothing has been run yet.")
+        return
+
+    def total_of(decision: str) -> float:
+        return sum(
+            r["total"] or 0
+            for r in recs
+            if r["decision"] == decision and (r["currency"] or "USD") == "USD"
         )
 
+    paid = sum(
+        (r["payment"] or {}).get("amount", 0)
+        for r in recs
+        if r["payment"] and r["payment"]["status"] == "paid"
+    )
+    n = lambda d: sum(r["decision"] == d for r in recs)  # noqa: E731
+    cards = [
+        ("Processed", str(len(recs))),
+        ("Auto-approved", str(n("APPROVE"))),
+        ("Needs review", str(n("HOLD"))),
+        ("Rejected", str(n("REJECT"))),
+        ("$ paid", money(paid)),
+        ("$ held", money(total_of("HOLD"))),
+    ]
+    cols = st.columns(len(cards))
+    for col, (k, v) in zip(cols, cards, strict=True):
+        col.markdown(metric(k, v), unsafe_allow_html=True)
+    st.markdown('<div class="lbl">Invoices</div>', unsafe_allow_html=True)
+    f1, f2 = st.columns([2, 3])
+    wanted = f1.multiselect(
+        "Show decisions", ["APPROVE", "HOLD", "REJECT", "DUPLICATE"],
+        default=["APPROVE", "HOLD", "REJECT", "DUPLICATE"],
+        format_func=lambda d: decision_badge(d),
+    )  # fmt: skip
+    needle = f2.text_input("Search vendor, invoice or reason").strip().lower()
+    rows = []
+    for r in recs:
+        line = {
+            "Invoice": r["invoice_number"] or Path(r["file"]).name,
+            "Vendor": r["vendor"] or "—",
+            "Decision": decision_badge(r["decision"]),
+            "Total": money(r["total"], r["currency"] or "USD"),
+            "Reason": r["reason"],
+        }
+        if r["decision"] in wanted and (needle in " ".join(map(str, line.values())).lower()):
+            rows.append(line)
+    st.dataframe(rows, use_container_width=True, hide_index=True)
 
-def tab_ledger(db_path: str) -> None:
-    db = open_db(db_path)
+
+# ---------------------------------------------------------------------------- review queue
+
+
+def suggestion(codes: set[str]) -> str:
+    if "non_usd" in codes:
+        return "Confirm with treasury, then pay manually. Payments only support US dollars."
+    if "revision" in codes:
+        return "Compare with the original invoice and confirm the corrected amount."
+    if "stock_exceeded" in codes:
+        return "Check with the warehouse whether the extra stock is on its way."
+    if codes & {"unknown_items", "item_needs_mapping"}:
+        return "Ask the vendor which catalogue item this is."
+    return "Review the reasons and decide."
+
+
+def tab_review() -> None:
+    db = Database(DB_PATH)
     try:
-        st.markdown("**Ledger**")
-        ledger = db.ledger()
-        if ledger:
-            st.dataframe(
-                [
-                    {
-                        "ID": r["id"],
-                        "File": Path(r["source_file"]).name,
-                        "Vendor": r["vendor"],
-                        "Total": money(r["total"], r["currency"] or "USD"),
-                        "Decision": decision_badge(r["decision"]),
-                        "Review": r["review_status"] or "-",
-                        "Duplicate of": r["duplicate_of"],
-                    }
-                    for r in ledger
-                ],
-                use_container_width=True,
-            )
-        else:
-            st.write("The ledger is empty.")
-
-        st.markdown("**Review queue (HOLD)**")
         queue = review_queue(db)
         if not queue:
             st.write("Nothing is waiting for review.")
         for r in queue:
-            name = Path(r["source_file"]).name
-            with st.expander(f"#{r['id']} {name} ({r['vendor'] or 'unknown vendor'})"):
-                for f in reasons_for(r):
-                    st.markdown(f"- {plain(f)}  `{f['code']}`")
-                elig = approval_eligibility(r)
-                if not elig.ok:
-                    st.warning("\u26d4 Approve is disabled: " + " ".join(elig.reasons))
-                with st.form(f"review_{r['id']}"):
-                    reviewer = st.text_input(
-                        "Reviewer name", value="reviewer", key=f"who_{r['id']}"
-                    )
-                    note = st.text_input("Reviewer note (required)", key=f"note_{r['id']}")
-                    approve = st.form_submit_button("Approve anyway", disabled=not elig.ok)
-                    reject = st.form_submit_button("Reject")
-                if approve or reject:
-                    try:
-                        res = review_hold(
-                            db, r["id"], "approve" if approve else "reject", note, reviewer
-                        )
-                        st.success(f"Recorded: {res.outcome}. {res.detail}")
-                    except ReviewError as exc:
-                        st.error(str(exc))
-        reviews = db.reviews()
-        if reviews:
-            st.markdown("**Review history**")
-            st.dataframe(reviews, use_container_width=True)
+            reasons = reasons_for(r)
+            elig = approval_eligibility(r)
+            cur = r["currency"] or "USD"
+            st.markdown(
+                f'<div class="card hold"><div class="row"><b>{esc(r["vendor"] or "Unknown vendor")}'
+                f" · {esc(r['invoice_number'] or '—')}</b>"
+                f'<span class="big">{esc(money(r["total"], cur))}</span></div>'
+                f'<p class="why">{esc("; ".join(plain(f) for f in reasons))}</p>'
+                f'<p class="why"><b>Suggested:</b> {esc(suggestion({f["code"] for f in reasons}))}</p></div>',
+                unsafe_allow_html=True,
+            )
+            if not elig.ok:
+                st.warning("Approve is unavailable: " + " ".join(elig.reasons))
+            with st.form(f"review_{r['id']}"):
+                note = st.text_input("Reviewer note (required)", key=f"note_{r['id']}")
+                confirm = st.checkbox(
+                    f"I confirm paying {money(r['total'], cur)} to {r['vendor'] or 'this vendor'}",
+                    key=f"confirm_{r['id']}",
+                    disabled=not elig.ok,
+                )
+                c1, c2 = st.columns(2)
+                approve = c1.form_submit_button("Approve and pay", disabled=not elig.ok)
+                reject = c2.form_submit_button("Reject")
+            if approve or reject:
+                try:
+                    if approve and not confirm:
+                        raise ReviewError("Tick the confirmation box before paying.")
+                    res = review_hold(db, r["id"], "approve" if approve else "reject", note)
+                    st.success({"approved_paid": "Approved and paid.", "rejected": "Rejected.",
+                                "approved_not_paid": "Approved; it had already been paid."}.get(res.outcome, res.outcome))  # fmt: skip
+                except ReviewError as exc:
+                    st.error(str(exc))
     finally:
         db.close()
 
 
-def tab_evaluation() -> None:
-    st.markdown("**Developer / evaluation view.** Not part of invoice processing.")
+# ---------------------------------------------------------------------------- evaluation
+
+
+def tab_evaluation(mode: str) -> None:
     st.caption(
-        "Runs all 22 sample documents in one execution mode in a throwaway database and compares "
-        "each decision with the PLAN section 4 baseline (a documented policy baseline, not ground "
-        "truth). Modes are never mixed: each is run and shown separately."
+        "Expected decisions (tests/regression/expected.yaml) against what this mode actually does, "
+        "for all sample invoices. Developer view."
     )
-    has_key = bool(os.environ.get("LLM_API_KEY", "").strip())
-    mode = st.radio("Execution mode to evaluate", ["none", "fixture", "live"], horizontal=True)
     if mode == "live":
-        if not has_key:
-            st.info("Live: not run \u2013 no API key (LLM_API_KEY is not set).")
-        else:
-            st.warning("Live evaluation is not implemented in this view yet.")
-        return
-    cache = st.session_state.setdefault("eval_cache", {})
+        st.warning("Live mode makes paid API calls. Use cache mode for a free, repeatable check.")
     if st.button(f"Run evaluation ({mode} mode)"):
-        cache[mode] = evaluate(mode)
-    rows = cache.get(mode)
-    if not rows:
-        st.write("No evaluation has been run for this mode yet.")
+        client = client_for(mode)
+        if mode != "none" and client is None:
+            return
+        st.session_state["eval"] = (mode, evaluate(mode, CACHE_DIR))
+    got = st.session_state.get("eval")
+    if not got:
+        st.write("No evaluation has been run yet.")
         return
-    st.subheader(f"Mode: {mode}")
+    ran_mode, ev = got
+    bad_pay = [r["file"] for r in ev["rows"] if r["paid"] and r["actual"] != "APPROVE"]
+    st.markdown(
+        f'<div class="card"><b>{esc(ev["summary"])}</b> · mode {esc(ran_mode)} · '
+        f"{len(bad_pay)} invalid payments</div>",
+        unsafe_allow_html=True,
+    )
     st.dataframe(
         [
             {
                 "File": r["file"],
+                "Expected": decision_badge(r["expected"]) if r["expected"] else "—",
                 "Actual": decision_badge(r["actual"]),
-                "\u00a74 baseline": r["baseline"],
-                "Class": r["class"],
-                "Cause": r["cause"],
-                "Codes": ", ".join(r["codes"]) or "-",
+                "Match": "✓ match" if r["match"] else "✗ differs",
+                "Why": r["reason"],
             }
-            for r in rows
+            for r in ev["rows"]
         ],
         use_container_width=True,
-    )
-    c = counts(rows)
-    st.write(
-        "Counts: "
-        + ", ".join(f"{k} {c.get(k, 0)}" for k in CLASSES if c.get(k, 0))
-        + f" (total {sum(c.values())})"
+        hide_index=True,
     )
 
 
 def main() -> None:
     st.set_page_config(page_title="Acme invoice agents", page_icon="\U0001f9fe", layout="wide")
-    st.title("Acme invoice agents")
-    mode, db_path = render_sidebar()
-    t1, t2, t3, t4 = st.tabs(
-        ["Process", "Batch", "Ledger & review queue", "Evaluation (vs \u00a74 baseline)"]
-    )
+    st.markdown(CSS, unsafe_allow_html=True)
+    mode = sidebar()
+    t1, t2, t3, t4 = st.tabs(["Process invoice", "Dashboard", "Review queue", "Evaluation"])
     with t1:
-        tab_process(mode, db_path)
+        tab_process(mode)
     with t2:
-        tab_batch(mode, db_path)
+        tab_dashboard(mode)
     with t3:
-        tab_ledger(db_path)
+        tab_review()
     with t4:
-        tab_evaluation()
+        tab_evaluation(mode)
 
 
 if __name__ == "__main__":

@@ -12,11 +12,8 @@ from typing import Any
 
 from .db import Database
 from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, Tool, failure_code
-from .llm.compat import prompt_hash
 from .models import Invoice, ResolutionResult
 from .validation import code_resolve
-
-RESOLVE_USER_TEMPLATE = 'json:{{"line_items": <names code could not resolve>}}'
 
 RESOLVE_SYSTEM = (
     "You map invoice line-item names to inventory SKUs. For every line item, call "
@@ -75,7 +72,6 @@ def resolve_items(
             [search_inventory_tool(db)],
             ResolutionResult,
             key=key,
-            prompt_hash=prompt_hash(RESOLVE_SYSTEM, RESOLVE_USER_TEMPLATE),
         )
     except (LLMUnavailable, SchemaValidationFailed) as exc:
         return ResolveOutcome(

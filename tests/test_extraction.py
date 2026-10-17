@@ -1,13 +1,9 @@
 import json
 
-from conftest import INVOICES
+from conftest import INVOICES, scripted_client
 
 from invoice_agents.ingestion.extractor import extract, extract_labelled, extract_with_llm
 from invoice_agents.ingestion.parsers import parse_file
-from invoice_agents.llm.client import FixtureClient, LLMClient, LLMUnavailable
-from invoice_agents.models import Invoice
-
-LABEL = {"provenance": "authored", "note": "Hand-written fixture, not a model output"}
 
 GOOD = {
     "vendor": "Widgets Inc.",
@@ -25,13 +21,6 @@ GOOD = {
     "total": 5000.0,
     "notes": [],
 }
-
-
-def write(root, key, step, response):
-    d = root / "extraction"
-    d.mkdir(parents=True, exist_ok=True)
-    name = f"{key}__{step}.json" if step else f"{key}.json"
-    (d / name).write_text(json.dumps({**LABEL, "response": response}))
 
 
 def test_label_fallback_extracts_1001():
@@ -74,50 +63,44 @@ def test_structured_formats_map_without_llm():
     assert extract(parse_file(INVOICES / "invoice_1014.xml"), None).invoice.currency == "EUR"
 
 
-def test_pydantic_retry_path_feeds_back_exact_error(tmp_path):
+def test_pydantic_retry_path_feeds_back_exact_error():
     doc = parse_file(INVOICES / "invoice_1001.txt")
     bad = json.loads(json.dumps(GOOD))
     bad["line_items"][0]["quantity"] = "ten"  # fails schema validation
-    write(tmp_path, doc.key, "", bad)
-    write(tmp_path, doc.key, "retry1", GOOD)
-    seen = []
-
-    class Spy(FixtureClient):
-        def structured(self, agent, messages, schema_model, **kw):
-            seen.append(messages[-1]["content"])
-            return super().structured(agent, messages, schema_model, **kw)
-
-    res = extract_with_llm(doc, Spy(tmp_path, verify=False))
-    assert not res.uncertain and res.attempts == 2
-    assert res.invoice.total == 5000.0
-    assert "failed schema validation" in seen[1] and "line_items.0.quantity" in seen[1]
+    client, transport = scripted_client({"extraction": [bad, GOOD]})
+    res = extract_with_llm(doc, client)
+    assert not res.uncertain and res.attempts == 2 and res.invoice.total == 5000.0
+    retry_msg = transport.calls[1][1][-1]["content"]
+    assert "failed schema validation" in retry_msg and "line_items.0.quantity" in retry_msg
     assert [c["outcome"] for c in res.llm_calls] == ["schema_error", "grounded"]
 
 
-def test_grounding_failure_retries_then_marks_uncertain(tmp_path):
+def test_extraction_gives_up_after_two_retries():
+    doc = parse_file(INVOICES / "invoice_1001.txt")
+    client, transport = scripted_client({"extraction": [{"vendor": 1}] * 3})
+    res = extract_with_llm(doc, client)
+    assert res.uncertain and res.attempts == 3 and len(transport.calls) == 3
+    assert res.failure_code == "extraction_failed"
+
+
+def test_grounding_failure_retries_then_marks_uncertain():
     doc = parse_file(INVOICES / "invoice_1001.txt")
     invented = {**GOOD, "vendor": "Gadgets LLC"}
-    for step in ("", "retry1", "retry2"):
-        write(tmp_path, doc.key, step, invented)
-    res = extract_with_llm(doc, FixtureClient(tmp_path, verify=False))
+    client, _ = scripted_client({"extraction": [invented] * 3})
+    res = extract_with_llm(doc, client)
     assert res.uncertain and res.attempts == 3
     assert any("grounding failed" in r and "Gadgets LLC" in r for r in res.reasons)
 
 
-def test_grounding_recovers_on_retry(tmp_path):
+def test_grounding_recovers_on_retry():
     doc = parse_file(INVOICES / "invoice_1001.txt")
-    write(tmp_path, doc.key, "", {**GOOD, "total": 5100.0})
-    write(tmp_path, doc.key, "retry1", GOOD)
-    res = extract_with_llm(doc, FixtureClient(tmp_path, verify=False))
+    client, _ = scripted_client({"extraction": [{**GOOD, "total": 5100.0}, GOOD]})
+    res = extract_with_llm(doc, client)
     assert not res.uncertain and res.attempts == 2
 
 
-def test_missing_fixture_is_uncertain_llm_unavailable(tmp_path):
+def test_llm_unavailable_is_uncertain_with_a_system_code():
     doc = parse_file(INVOICES / "invoice_1001.txt")
-    res = extract_with_llm(doc, FixtureClient(tmp_path, verify=False))
-    assert res.uncertain and "LLM unavailable" in res.reasons[0]
-
-
-def test_llm_client_is_abstract():
-    assert issubclass(FixtureClient, LLMClient) and issubclass(LLMUnavailable, RuntimeError)
-    assert Invoice.model_json_schema()["properties"]["line_items"]
+    client, _ = scripted_client({})
+    res = extract_with_llm(doc, client)
+    assert res.uncertain and res.failure_code == "llm_unavailable"

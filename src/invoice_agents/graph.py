@@ -39,7 +39,7 @@ TIER_TEXT = {
 class Context:
     db: Database
     client: LLMClient | None
-    llm_mode: str  # fixture | none | live
+    llm_mode: str  # live | cache | none
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     payer: Any = None  # injectable for tests; defaults to mock_payment
 
@@ -195,16 +195,9 @@ def build_graph(ctx: Context):
             )
             jlog("warning", run_id=ctx.run_id, file=state["path"], message=msg)
         if not res.duplicate_of:
-            vk = vendor_key(inv)
-            known = bool(
-                vk
-                and db.conn.execute(
-                    "SELECT 1 FROM invoices WHERE vendor_norm = ?", (vk,)
-                ).fetchone()
-            )
-            risk = assess(inv, state["doc"].raw_text, known_vendor=known)
+            risk = assess(inv, state["doc"].raw_text)
             res.findings.extend(risk.findings)
-            res.facts["risk.score"] = str(risk.score)
+            res.facts["risk.level"] = risk.level
             blockers = [x.code for x in res.findings if x.severity in ("reject", "hold")]
             res.facts["check.blockers"] = ", ".join(blockers) if blockers else "none"
         lines = [f"[{f.severity}] {finding_line(f)}" for f in res.findings] or ["no findings"]

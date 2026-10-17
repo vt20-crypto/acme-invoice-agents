@@ -16,7 +16,6 @@ from typing import Any
 
 from ..config import MAX_EXTRACT_RETRIES
 from ..llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
-from ..llm.compat import prompt_hash
 from ..logs import jlog
 from ..models import Charge, Invoice, LineItem
 from ..normalize import number_grounded, numbers_in_text, parse_number, text_grounded
@@ -324,7 +323,6 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
             "content": EXTRACTION_USER_TEMPLATE.format(format=doc.format, text=doc.raw_text),
         },
     ]
-    phash = prompt_hash(EXTRACTION_SYSTEM, EXTRACTION_USER_TEMPLATE)
     calls: list[dict[str, Any]] = []
     last: Invoice | None = None
     reasons: list[str] = []
@@ -332,9 +330,7 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
     for attempt in range(1 + MAX_EXTRACT_RETRIES):
         step = "" if attempt == 0 else f"retry{attempt}"
         try:
-            inv, prov = client.structured(
-                "extraction", messages, Invoice, key=doc.key, step=step, prompt_hash=phash
-            )
+            inv, prov = client.structured("extraction", messages, Invoice, key=doc.key)
         except SchemaValidationFailed as exc:
             reasons = [f"schema validation failed: {exc.error_text}"]
             calls.append(

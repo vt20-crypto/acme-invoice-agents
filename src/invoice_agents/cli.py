@@ -6,14 +6,20 @@ import argparse
 import sys
 from pathlib import Path
 
-from .batch import collect_files, result_record, summary_table, write_results
+from .batch import collect_files, result_record, summary_table
 from .db import Database
 from .graph import Context, PipelineState, process_invoice
 from .ingestion.parsers import parse_file
-from .llm.client import FixtureClient, LiveClient, LLMClient, LLMUnavailable
+from .llm.client import LLMUnavailable, make_client
 from .logs import jlog
 from .models import Decision
-from .presentation import decision_label, display_path, money, split_reasons
+from .presentation import (
+    decision_label,
+    display_path,
+    money,
+    split_reasons,
+    vendor_message,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,22 +33,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="process every invoice file in these directories, in order: directories as given, "
         "files within each sorted by file name (Python sorted(), byte order)",
     )
-    p.add_argument("--out", metavar="FILE", help="write one JSON line per document (overwrites)")
-    p.add_argument("--verbose", action="store_true", help="in batch mode print every step")
-    p.add_argument("--llm", choices=["fixture", "none", "live"], default="fixture")
+    p.add_argument(
+        "--llm",
+        choices=["live", "cache", "none"],
+        default="cache",
+        help="live: call Grok and record responses; cache: replay recorded responses only; "
+        "none: code only",
+    )
     p.add_argument("--db", default="acme.db", help="SQLite database file")
-    p.add_argument("--fixtures", default="fixtures/llm", help="fixture directory for --llm fixture")
+    p.add_argument("--cache", default="cache/llm", help="LLM response cache directory")
     p.add_argument("--fresh", action="store_true", help="wipe and reseed the database first")
     return p
 
 
-def render(
-    state: PipelineState,
-    ctx: Context,
-    prior: dict | None,
-    verbose: bool = False,
-    db_path: str = "",
-) -> str:
+def render(state: PipelineState, ctx: Context, prior: dict | None) -> str:
     out = [
         f"=== Invoice: {display_path(state['path'])} ===",
         f"run={ctx.run_id}  llm mode={ctx.llm_mode}",
@@ -57,11 +61,12 @@ def render(
         out += [f"    {line}" for line in step["lines"]]
     out.append("\n--- Result ---")
     decision: Decision = state["decision"]
-    out.append(f"Decision: {decision.value}")
+    findings = state.get("findings", [])
+    out.append(f"Decision: {decision_label(decision.value, findings)}")
     pay = state.get("payment")
     if pay:
-        amount = money(pay["amount"], pay.get("currency", "USD"))
         if pay["status"] == "paid":
+            amount = money(pay["amount"], pay.get("currency", "USD"))
             line = f"Payment: paid {amount} to {pay['vendor']}"
             if pay.get("output"):
                 line += f"  (mock_payment output: {pay['output']})"
@@ -72,10 +77,6 @@ def render(
         out.append(f"Payment: none (duplicate of ledger #{state.get('duplicate_of')})")
     else:
         out.append("Payment: none")
-    findings = state.get("findings", [])
-    out[out.index(f"Decision: {decision.value}")] = (
-        f"Decision: {decision_label(decision.value, findings)}"
-    )
     if decision is not Decision.APPROVE:
         split = split_reasons(findings)
         if split["execution"]:
@@ -84,6 +85,13 @@ def render(
         if split["business"]:
             out.append("Business reasons:")
             out += [f"  - {r}" for r in split["business"]]
+    if decision is Decision.REJECT:
+        inv = state.get("invoice")
+        out.append("\nVendor message (template, not sent):")
+        msg = vendor_message(
+            inv.vendor if inv else None, inv.invoice_number if inv else None, findings
+        )
+        out += [f"  | {line}" for line in msg.splitlines()]
     calls = state.get("llm_calls", [])
     if calls:
         out.append("LLM provenance by step:")
@@ -93,22 +101,7 @@ def render(
         ]
     else:
         out.append("LLM provenance: none (code-only run)")
-    if verbose:
-        out += [
-            "\n--- Developer details ---",
-            f"absolute path: {Path(state['path']).resolve()}",
-            f"database: {Path(db_path).resolve() if db_path else 'n/a'}",
-            f"document fingerprint: {state['doc'].fingerprint}",
-        ]
     return "\n".join(out)
-
-
-def make_client(mode: str, fixtures: str) -> LLMClient | None:
-    if mode == "none":
-        return None
-    if mode == "fixture":
-        return FixtureClient(fixtures)
-    return LiveClient.from_env()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -128,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.fresh:
             db.reset()
         try:
-            client = make_client(args.llm, args.fixtures)
+            client = make_client(args.llm, args.cache)
         except LLMUnavailable as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -141,12 +134,10 @@ def main(argv: list[str] | None = None) -> int:
             state = process_invoice(str(path), ctx)
             jlog("run_end", run_id=ctx.run_id, decision=state["decision"].value)
             records.append(result_record(state, ctx.run_id))
-            if not args.batch or args.verbose:
-                print(render(state, ctx, prior, args.verbose, args.db))
+            if not args.batch:
+                print(render(state, ctx, prior))
         if args.batch:
             print(summary_table(records))
-        if args.out:
-            write_results(args.out, records)
         return 0
     finally:
         db.close()

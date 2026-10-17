@@ -1,88 +1,73 @@
 # Decision log
 
-Short, factual entries. Newest decisions are appended at the end.
+Short, factual entries.
 
-## 1. First-time vendor carries weight 0
-In a fresh ledger every vendor is first-time, so the signal fires on every invoice and carries no
-information. It is computed and shown as informational but adds nothing to the risk score and
-emits no finding. (Decision-log finding #1.)
+## 1. LLM API: Responses API with structured outputs
+A one-call smoke test against the live xAI API (grok-4.3) confirmed the Responses API accepts a
+Pydantic JSON schema (`text.format = json_schema`), `reasoning.effort` of `none` and `low`, and
+function tools with `function_call_output` follow-ups. Chat Completions is marked deprecated by
+xAI, so the Responses API is used. `presence_penalty`, `frequency_penalty` and `stop` are never
+sent. Extraction uses `reasoning_effort=none`; resolve, VP and critic use `low`.
 
-## 2. Arithmetic rejects: invoice_1007 and invoice_1013.json
-Total must equal the sum of lines plus charges plus tax, within 0.01.
-- invoice_1007.csv: lines 14,750.00 + 6% tax 885.00 = 15,635.00, but the file states 15,525.00.
-- invoice_1013.json: lines 21,040.00 + 7% tax 1,472.80 = 22,512.80, but the file states 22,562.80.
-
-Both are REJECT on the arithmetic blocker (they also exceed stock). The brief's table does not
-list these files as arithmetic errors; the data does not reconcile, so the rule stands.
+## 2. LLM cache replaces fixtures
+Every live response is written to `cache/llm/<step>/<doc-fingerprint16>-<request-hash12>.json`
+(provenance `recorded`, model, timestamp, token usage, response; no secrets). The request hash
+covers the exact messages, schema, tools, model and settings, so a changed prompt or input is a
+different, missing entry. Modes: `live` calls Grok and records, `cache` replays only (a miss is a
+HOLD with a system issue), `none` is code only. The regression test runs in cache mode, needs no
+key and fails on any missing entry.
 
 ## 3. Address denylist: added, then removed
-Added in iteration 2 as a DEMONSTRATION LIST of well-known landmark or fictional addresses (for
-example 1600 Pennsylvania Ave, 742 Evergreen Terrace), weight 6, so one match was a conclusive
-REJECT. Removed entirely (code, risk signal and tests) because it was an unsupported rule: the MVP
-has no principled data source for "an address that cannot be a real vendor". A real deployment would
-use address verification plus the vendor master. No invoice-specific exceptions replace it.
-Effect on outcomes versus PLAN section 4:
-- invoice_1004.json: APPROVE (matches section 4; the denylist had briefly made it REJECT).
-- invoice_1004_revised.json: HOLD, revision of a paid original, delta +4,050.00 (matches).
-- invoice_1005.json: HOLD on `stock_exceeded` (GadgetX 8 > 5). Section 4 expected REJECT then audit
-  on the strength of its White House address; without that signal no documented validation or
-  risk rule justifies more than HOLD. This is a deliberate difference from section 4.
+It flagged landmark or fictional addresses. Removed because there is no principled data source for
+"an address that cannot be a real vendor" in this MVP. A real deployment would use address
+verification plus the vendor master. No invoice-specific exceptions replace it, so invoice_1004
+(742 Evergreen Terrace) is evaluated on its content and approves.
 
-## 4. Tiered item resolution
-Tier 1 is code: exact match after normalization (case, punctuation, spaces, parentheticals
-stripped). Tier 2 is the LLM with a `search_inventory` tool, used only for names tier 1 cannot
-resolve. The tier is logged per line. Whatever SKU the LLM proposes, validation re-checks it
-exactly against the database; a SKU not in the database is treated as unknown.
+## 4. Risk is a simple level, not a score
+Five rules: prompt injection (high); pressure language, vendor identity change ("formerly"),
+invalid due date (medium each); total in 9,000-9,999.99 (low). Overall: high if any high rule or two
+or more medium; medium if exactly one medium; else low. High is REJECT, medium is HOLD, low is a
+note. Unknown items and stock are validation blockers and are not counted as risk. There is no
+weighting, no round-total rule and no first-time-vendor rule (it fires on every invoice in a fresh
+ledger, so it carries no information).
 
-## 5. Due-date validity is judged against the invoice date
-A due date is invalid if it is unparseable, a word such as "yesterday", or earlier than the invoice
-date. It is not compared with today's date: sample invoices are dated early 2026 and a wall-clock
-comparison would make every sample invoice overdue.
+## 5. Arithmetic rejects: invoice_1007 and invoice_1013.json
+Total must equal lines plus charges plus tax within 0.01.
+- invoice_1007.csv: 14,750.00 + 6% tax 885.00 = 15,635.00, but the file states 15,525.00.
+- invoice_1013.json: 21,040.00 + 7% tax 1,472.80 = 22,512.80, but the file states 22,562.80.
 
-## 6. USD-only payment rail
+## 6. Tiered item resolution
+Code first: exact match after normalization (case, punctuation, spaces, parentheticals).
+Unresolved names go to the LLM with a `search_inventory` tool. Whatever SKU the LLM proposes,
+validation re-checks it exactly in the database. All items unknown is a REJECT only when a search
+actually ran and found nothing; without a search (`--llm none`, or the LLM step failed) the finding
+is `item_needs_mapping`, a HOLD and a system issue.
+
+## 7. Due-date validity is judged against the invoice date
+A due date is invalid if unparseable, a word such as "yesterday", or earlier than the invoice
+date. Today's date is not used: the samples are dated early 2026 and would all look overdue.
+
+## 8. USD-only payment rail, no FX
 `mock_payment(vendor, amount)` has no currency field, so it is treated as a USD rail. Non-USD
-invoices are held (no FX conversion), and the payment wrapper refuses any non-USD amount as a
-second line of defence.
+invoices are held, and the payment wrapper refuses non-USD as a second guard. There is no
+conversion and no one-click non-USD approval anywhere.
 
-## 7. Duplicate versus revision
+## 9. Duplicate versus revision
 Same normalized vendor and invoice number with the same economic content (lines, charges, tax,
-total, currency) is a DUPLICATE: linked to the original, no payment, whatever the original's
-decision was. Same key with changed content is a revision: a HOLD blocker that shows the total
-delta, never auto-paid. Other blockers still apply, so a revision that also fails another check
-takes the stricter outcome.
+total, currency) is a DUPLICATE: linked to the original, never paid again. Same key with changed
+content is a revision: a HOLD that shows the total delta. A revision is never auto-paid.
 
-## 8. Execution failures are separate from business findings
-Findings carry `kind`: `business` (vendor or invoice defects, such as arithmetic, stock, revision)
-or `execution` (the system could not do its job: `llm_unavailable`, `fixture_missing`,
-`fixture_stale`, `extraction_failed`, `item_needs_mapping`, `critic_unresolved`, `vp_requires_llm`,
-`payment_failed`). A missing fixture is never a vendor defect. Results, JSONL, CLI and UI show
-"HOLD - system issue: ..." separately from business reasons. This renames the earlier
-`uncertain_extraction` to `extraction_failed` (or the specific cause).
+## 10. System issues are separate from business findings
+Findings are `business` (vendor or invoice defects) or `execution` (no LLM, cache miss, extraction
+or item mapping not possible). The UI and CLI show "HOLD - system issue" separately. A missing
+cache entry is never reported as a vendor defect.
 
-## 9. Unmapped item names without an LLM search are a HOLD, not a REJECT
-`all_items_unknown` (REJECT) now requires that an inventory search actually ran (LLM tool call) and
-found nothing. If code could not resolve a name and no search ran (`--llm none`, or the LLM step
-failed), the finding is `item_needs_mapping` (HOLD, execution). Effect: invoice_9003 in none mode is
-HOLD rather than REJECT, and invoice_1016 in none mode is HOLD for mapping rather than for a
-business `unknown_items`.
+## 11. Human review and eligibility
+A reviewer can approve or reject a held invoice with a note. Approve is refused (backend and UI)
+when vendor, invoice number or a positive total is missing, the currency is not USD, a REJECT
+blocker exists, or a system issue left fields unverified. Payment still goes through the code
+guard (idempotency key, USD only).
 
-## 10. Fixtures are bound to the prompt, schema, input and settings they were made for
-Each fixture stores hashes of the prompt (system + user template), schema, exact messages, model and
-settings. A mismatch at load is `fixture_stale` (HOLD, execution), never silently used.
-`fixtures/manifest.json` lists the required fixtures; a test fails if any is missing or stale.
-`authored` (hand-written) is kept distinct from `recorded` (captured live). Authored fixtures are
-stamped with hashes by `python -m invoice_agents.record stamp`; that asserts only that the response
-was written for that input, not that a model produced it.
-
-## 11. Human approval eligibility
-A reviewer cannot "Approve anyway" when: vendor, invoice number or a positive total is missing; the
-currency is not USD (no FX, no one-click non-USD approval); any REJECT blocker exists; or an
-extraction/mapping system issue left fields unverified. Enforced in `review.py` (backend) and by
-disabling the button with the reason in the UI. Payment still goes through the guard.
-
-## 12. PLAN section 4 baseline refreshed
-PLAN section 4 was updated to follow the validation and risk policy: 1005 HOLD, 1007 REJECT
-(arithmetic), 1013.json REJECT (arithmetic). Those rows now match. The baseline is a documented
-policy baseline, not ground truth, and lives in `docs/baseline_plan4.json`. Remaining gaps are
-labelled: `expected exception` (the mode cannot do the task, for example messy text with
-`--llm none`), `missing fixture`, and `no baseline` (invoice_9003 has no section 4 row).
+## 12. Baseline
+`tests/regression/expected.yaml` was written before the first live run and records the documented
+decision for each of the 22 documents. A live result that differs is reported, not edited away.

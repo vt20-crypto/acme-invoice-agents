@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -10,7 +9,14 @@ from typing import Any
 from .db import Database
 from .graph import Context, PipelineState, process_invoice
 from .llm.client import LLMClient
-from .presentation import cause, decision_label, display_path, key_codes
+from .presentation import (
+    cause,
+    decision_label,
+    display_path,
+    key_codes,
+    reason_sentence,
+    vendor_message,
+)
 
 SUPPORTED = {".txt", ".pdf", ".csv", ".json", ".xml"}
 
@@ -48,6 +54,14 @@ def result_record(state: PipelineState, run_id: str) -> dict[str, Any]:
         ),
         "findings": [f.model_dump() for f in findings],
         "reasons": [r.model_dump() for r in state.get("reasons", [])],
+        "reason": reason_sentence(state["decision"].value, findings),
+        "vendor_message": (
+            vendor_message(
+                inv.vendor if inv else None, inv.invoice_number if inv else None, findings
+            )
+            if state["decision"].value == "REJECT"
+            else None
+        ),
         "payment": state.get("payment"),
         "duplicate_of": state.get("duplicate_of"),
         "ledger_id": state.get("ledger_id"),
@@ -68,13 +82,6 @@ def run_batch(
         ctx = Context(db=db, client=client, llm_mode=llm_mode, payer=payer)
         results.append((process_invoice(str(p), ctx), ctx))
     return results
-
-
-def write_results(path: str | Path, records: Iterable[dict[str, Any]]) -> None:
-    """One JSON line per document. The file is overwritten on each invocation."""
-    with open(path, "w") as fh:
-        for r in records:
-            fh.write(json.dumps(r, default=str) + "\n")
 
 
 def summary_table(records: list[dict[str, Any]]) -> str:

@@ -65,3 +65,16 @@ def test_pdf():
     doc = parse_file(INVOICES / "invoice_1011.pdf")
     assert doc.format == "pdf"
     assert "INV-1011" in doc.raw_text and "Summit Manufacturing" in doc.raw_text
+
+
+def test_1007_footer_rows_carry_the_values_as_stated():
+    # Raw rows: ",,,,,,Subtotal:,14750.00"  ",,,,,,Tax (6%):,885.00"  ",,,,,,Total:,15525.00"
+    doc = parse_file(INVOICES / "invoice_1007.csv")
+    footer = doc.structured["footer"]
+    assert footer["subtotal"] == "14750.00"
+    assert footer["tax (6%)"] == "885.00"
+    assert footer["total"] == "15525.00"
+    from invoice_agents.ingestion.extractor import extract_structured
+
+    inv = extract_structured(doc)
+    assert (inv.subtotal, inv.tax, inv.total) == (14750.0, 885.0, 15525.0)

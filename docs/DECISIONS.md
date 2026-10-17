@@ -15,15 +15,18 @@ Total must equal the sum of lines plus charges plus tax, within 0.01.
 Both are REJECT on the arithmetic blocker (they also exceed stock). The brief's table does not
 list these files as arithmetic errors; the data does not reconcile, so the rule stands.
 
-## 3. Address denylist and invoice_1004
-Category: well-known landmark or fictional addresses that cannot belong to a real vendor
-(for example 1600 Pennsylvania Ave, 742 Evergreen Terrace, 221B Baker Street). It is a
-DEMONSTRATION LIST in code, weight 6, so one match is a conclusive REJECT.
-invoice_1004.json and invoice_1004_revised.json list 742 Evergreen Terrace (the fictional
-Springfield address), so invoice_1004.json is now REJECT. This contradicts the brief's README
-table, which treats 1004 as a normal invoice. We follow the rule over the table: a vendor address
-that cannot exist is a stronger signal than the clean line items. A production system would use a
-vendor master and address validation instead of a list.
+## 3. Address denylist: added, then removed
+Added in iteration 2 as a DEMONSTRATION LIST of well-known landmark or fictional addresses (for
+example 1600 Pennsylvania Ave, 742 Evergreen Terrace), weight 6, so one match was a conclusive
+REJECT. Removed entirely (code, risk signal and tests) because it was an unsupported rule: the MVP
+has no principled data source for "an address that cannot be a real vendor". A real deployment would
+use address verification plus the vendor master. No invoice-specific exceptions replace it.
+Effect on outcomes versus PLAN section 4:
+- invoice_1004.json: APPROVE (matches section 4; the denylist had briefly made it REJECT).
+- invoice_1004_revised.json: HOLD, revision of a paid original, delta +4,050.00 (matches).
+- invoice_1005.json: HOLD on `stock_exceeded` (GadgetX 8 > 5). Section 4 expected REJECT then audit
+  on the strength of its White House address; without that signal no documented validation or
+  risk rule justifies more than HOLD. This is a deliberate difference from section 4.
 
 ## 4. Tiered item resolution
 Tier 1 is code: exact match after normalization (case, punctuation, spaces, parentheticals

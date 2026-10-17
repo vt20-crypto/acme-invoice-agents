@@ -58,7 +58,7 @@ def test_none_mode_covers_all_20_samples_plus_synthetic():
 def test_none_mode_payments_match_approvals(none_run):
     db, states = none_run
     approved = [s for s in states.values() if s["decision"].value == "APPROVE"]
-    assert len(db.payments()) == len(approved) == 5
+    assert len(db.payments()) == len(approved) == 6
     assert all(p["status"] == "sent" for p in db.payments())
 
 

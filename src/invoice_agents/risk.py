@@ -18,7 +18,6 @@ HOLD_SCORE = 3
 WEIGHTS = {
     "pressure_language": 3,
     "vendor_identity_change": 3,
-    "demo_address": 6,
     "prompt_injection": 6,
     "invalid_due_date": 2,
     "near_threshold": 1,
@@ -39,38 +38,6 @@ INJECTION = re.compile(
 BAD_DUE_WORDS = re.compile(
     r"\bdue(?:\s*date)?\s*:\s*(yesterday|immediate\w*|asap|now|today)\b", re.I
 )
-
-# DEMONSTRATION LIST: well-known landmark or fictional addresses that cannot belong to a real
-# vendor. A production system would use a maintained vendor master and address validation.
-DEMO_ADDRESS_DENYLIST = (
-    "1600 Pennsylvania Ave",
-    "742 Evergreen Terrace",
-    "221B Baker Street",
-    "4 Privet Drive",
-    "12 Grimmauld Place",
-    "124 Conch Street",
-    "31 Spooner Street",
-    "1640 Riverside Drive",
-)
-
-_ADDRESS_ABBREV = {
-    "avenue": "ave",
-    "street": "st",
-    "drive": "dr",
-    "place": "pl",
-    "terrace": "ter",
-    "terr": "ter",
-}
-
-
-def norm_address(s: str) -> str:
-    """Casefold, drop punctuation, collapse spaces, and abbreviate street types, so that
-    '1600 Pennsylvania Avenue NW' and '1600 pennsylvania ave.' compare equal."""
-    words = re.sub(r"[^0-9a-z]+", " ", s.casefold()).split()
-    return " " + " ".join(_ADDRESS_ABBREV.get(w, w) for w in words) + " "
-
-
-_DENY_NORM = tuple((a, norm_address(a)) for a in DEMO_ADDRESS_DENYLIST)
 
 NEAR_THRESHOLD = (9_000.0, 10_000.0)  # [9,000.00, 9,999.99]
 
@@ -99,9 +66,6 @@ def assess(invoice: Invoice, text: str, *, known_vendor: bool = False) -> RiskRe
         hit("pressure_language", f"found {m.group(0)!r}")
     if m := IDENTITY_CHANGE.search(text):
         hit("vendor_identity_change", f"found {m.group(0)!r}")
-    haystack = norm_address(text)
-    if addr := next((orig for orig, norm in _DENY_NORM if norm in haystack), None):
-        hit("demo_address", f"address matches {addr!r} (landmark or fictional; DEMONSTRATION LIST)")
     if m := INJECTION.search(text):
         hit("prompt_injection", f"found {m.group(0)!r}")
 

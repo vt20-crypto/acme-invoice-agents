@@ -96,13 +96,15 @@ no blocker. Approve is refused for:
   `line_arithmetic`, `subtotal_mismatch`, `arithmetic`, `all_items_unknown`, a `vp_reject`, or a
   high `risk_level`;
 - a system issue that left fields unverified: an execution-kind finding from the extraction or
-  item-resolution stage (`stage` of `extraction` or `resolve`) (for example `llm_unavailable`, `cache_missing`, `extraction_failed`,
-  `invoice_number_unreadable`); the reviewer is told to re-run once it is fixed.
+  item-resolution stage (`stage` of `extraction` or `resolve`; for example `llm_unavailable`,
+  `cache_missing`, `extraction_failed`, `invoice_number_unreadable`); the reviewer is told to re-run once it is fixed.
 
 Any other HOLD can be approved, for example `invalid_due_date`, `arithmetic_unverifiable`,
 `item_needs_mapping`, `unknown_items`, `stock_exceeded`, `revision`, a `vp_hold`, and the
 approval-stage system issues `vp_requires_llm`, `critic_unresolved` and an LLM failure in the VP
-step (the system-issue block applies only to the extraction and item-resolution stages). Approval then calls `pay_invoice` with the key `vendor|invoice number`: if the guard
+step (the system-issue block applies only to the extraction and item-resolution stages).
+
+Approval then calls `pay_invoice` with the key `vendor|invoice number`: if the guard
 refuses or the payer fails, the invoice stays on HOLD with the reason recorded; if the key was
 already paid, nothing is paid again (`approved_by_human_already_paid`). Only a successful payment
 makes the invoice APPROVE (`approved_by_human`).
@@ -309,7 +311,7 @@ resolution, due dates judged against the invoice date, the USD-only rail, duplic
 - **Payment reconciliation is not implemented.** `mock_payment` is synchronous and assumed to
   succeed. If the payer raises or does not return `{"status": "success"}`, the payment row is set
   to `failed` and the invoice becomes HOLD with a `payment_failed` finding
-  (`payments.py:56-61`, `graph.py:312-317`). The payment key stays used, so a later approval of
+  (`payments.py:56-61`, `graph.py:313-317`). The payment key stays used, so a later approval of
   the same invoice reports `duplicate` rather than retrying; a process crash after the row is
   inserted leaves it `pending`. There is no handling of pending or reversed payments, no retry
   and no reconciliation against an external ledger.

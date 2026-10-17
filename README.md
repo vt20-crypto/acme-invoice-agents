@@ -97,17 +97,21 @@ no blocker. Approve is refused for:
   high `risk_level`;
 - a system issue that left fields unverified: an execution-kind finding from the extraction or
   item-resolution stage (`stage` of `extraction` or `resolve`; for example `llm_unavailable`,
-  `cache_missing`, `extraction_failed`, `invoice_number_unreadable`); the reviewer is told to re-run once it is fixed.
+  `cache_missing`, `extraction_failed`, `invoice_number_unreadable`); the reviewer is told to re-run once it
+  is fixed.
 
 Any other HOLD can be approved, for example `invalid_due_date`, `arithmetic_unverifiable`,
 `item_needs_mapping`, `unknown_items`, `stock_exceeded`, `revision`, a `vp_hold`, and the
 approval-stage system issues `vp_requires_llm`, `critic_unresolved` and an LLM failure in the VP
 step (the system-issue block applies only to the extraction and item-resolution stages).
 
-Approval then calls `pay_invoice` with the key `vendor|invoice number`: if the guard
-refuses or the payer fails, the invoice stays on HOLD with the reason recorded; if the key was
-already paid, nothing is paid again (`approved_by_human_already_paid`). Only a successful payment
-makes the invoice APPROVE (`approved_by_human`).
+Approval then calls `pay_invoice` with the key `vendor|invoice number`. If the guard refuses or
+the payer fails, the invoice stays on HOLD with the reason recorded. If a payment record with that
+key already exists, nothing is sent again and the invoice is marked
+`approved_by_human_already_paid`. That status only means the payment key already exists; it does
+not independently verify that an earlier payment succeeded. Because a failed or pending attempt
+also keeps its key (see Known limitations), such cases need manual investigation of the payment
+record. Only a successful payment in this review makes the invoice APPROVE (`approved_by_human`).
 
 ## How the brief is met
 

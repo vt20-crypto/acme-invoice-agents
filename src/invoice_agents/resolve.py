@@ -11,7 +11,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .db import Database
-from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, Tool, failure_code
+from .llm.client import (
+    LLMClient,
+    LLMUnavailable,
+    NoRecordedAI,
+    SchemaValidationFailed,
+    Tool,
+    failure_code,
+)
 from .models import Invoice, ResolutionResult
 from .validation import code_resolve
 
@@ -34,6 +41,7 @@ class ResolveOutcome:
     error: str | None = None  # set when the LLM path failed (lines stay unresolved)
     error_code: str | None = None
     searched: list[bool] = field(default_factory=list)  # per line: the LLM search actually ran
+    rules_only: bool = False  # auto mode: no recorded response and no key, so no LLM search
 
 
 def search_inventory_tool(db: Database) -> Tool:
@@ -73,6 +81,8 @@ def resolve_items(
             ResolutionResult,
             key=key,
         )
+    except NoRecordedAI:
+        return ResolveOutcome(proposed, tiers, "code", searched=nobody, rules_only=True)
     except (LLMUnavailable, SchemaValidationFailed) as exc:
         return ResolveOutcome(
             proposed, tiers, "tiered", error=str(exc), error_code=failure_code(exc), searched=nobody

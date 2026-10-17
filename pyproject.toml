@@ -11,7 +11,6 @@ dependencies = [
     "pdfplumber>=0.11.10",
     "pydantic>=2",
     "python-dotenv>=1.2.4",
-    "pyyaml>=6.0.3",
     "streamlit>=1.66.0",
 ]
 

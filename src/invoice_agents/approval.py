@@ -14,7 +14,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import MAX_VP_REVISIONS, VP_REVIEW_THRESHOLD
-from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
+from .llm.client import (
+    LLMClient,
+    LLMUnavailable,
+    NoRecordedAI,
+    SchemaValidationFailed,
+    failure_code,
+)
 from .models import Critique, Decision, Finding, Invoice, Reason, VPDraft
 
 _RANK = {Decision.APPROVE: 0, Decision.HOLD: 1, Decision.REJECT: 2}
@@ -74,6 +80,30 @@ def check_draft(draft: VPDraft, facts: dict[str, str]) -> list[str]:
     return issues
 
 
+def _rules_only(total: float, over: bool) -> ApprovalOutcome:
+    """Approval without an LLM (--llm none, or auto with nothing recorded and no key)."""
+    if over:
+        f = Finding(
+            code="vp_requires_llm",
+            severity="hold",
+            message=(
+                f"Total {total:,.2f} exceeds {VP_REVIEW_THRESHOLD:,.0f}; VP review requires LLM."
+            ),
+            stage="approval",
+        )
+        return ApprovalOutcome(Decision.HOLD, findings=[f], notes=["Rules only (no LLM)."])
+    return ApprovalOutcome(
+        Decision.APPROVE,
+        reasons=[
+            Reason(
+                claim="No blockers and total within VP threshold (rules only).",
+                fact_ref="check.blockers",
+            )
+        ],
+        notes=["Rules only (no LLM)."],
+    )
+
+
 def run_approval(
     invoice: Invoice,
     findings: list[Finding],
@@ -91,27 +121,7 @@ def run_approval(
     over = total > VP_REVIEW_THRESHOLD
 
     if client is None:  # --llm none: rules only
-        if over:
-            f = Finding(
-                code="vp_requires_llm",
-                severity="hold",
-                message=(
-                    f"Total {total:,.2f} exceeds {VP_REVIEW_THRESHOLD:,.0f}; "
-                    "VP review requires LLM."
-                ),
-                stage="approval",
-            )
-            return ApprovalOutcome(Decision.HOLD, findings=[f], notes=["Rules only (no LLM)."])
-        return ApprovalOutcome(
-            Decision.APPROVE,
-            reasons=[
-                Reason(
-                    claim="No blockers and total within VP threshold (rules only).",
-                    fact_ref="check.blockers",
-                )
-            ],
-            notes=["Rules only (no LLM)."],
-        )
+        return _rules_only(total, over)
 
     out = ApprovalOutcome(Decision.HOLD)
     messages: list[dict[str, Any]] = [
@@ -183,6 +193,10 @@ def run_approval(
                 stage="approval",
             )
         )
+    except NoRecordedAI:  # auto mode: nothing recorded and no key -> rules only
+        res = _rules_only(total, over)
+        res.llm_calls = [{"agent": "vp_approval", "step": "draft", "outcome": "rules_only"}]
+        return res
     except (LLMUnavailable, SchemaValidationFailed) as exc:
         out.findings.append(
             Finding(

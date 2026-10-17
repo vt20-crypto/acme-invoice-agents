@@ -1,4 +1,4 @@
-.PHONY: install test lint run reset ui
+.PHONY: install test lint run reset ui eval
 
 install:
 	uv sync
@@ -17,3 +17,6 @@ reset:
 
 ui:
 	uv run streamlit run app/streamlit_app.py
+
+eval:
+	uv run python main.py eval --llm cache

@@ -164,9 +164,7 @@ python-dotenv==1.2.4
 python-multipart==0.0.32
     # via streamlit
 pyyaml==6.0.3
-    # via
-    #   acme-invoice-agents
-    #   langchain-core
+    # via langchain-core
 referencing==0.37.0
     # via
     #   jsonschema

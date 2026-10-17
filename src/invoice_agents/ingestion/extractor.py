@@ -15,7 +15,13 @@ from datetime import date, datetime
 from typing import Any
 
 from ..config import MAX_EXTRACT_RETRIES
-from ..llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
+from ..llm.client import (
+    LLMClient,
+    LLMUnavailable,
+    NoRecordedAI,
+    SchemaValidationFailed,
+    failure_code,
+)
 from ..logs import jlog
 from ..models import Charge, Invoice, LineItem
 from ..normalize import number_grounded, numbers_in_text, parse_number, text_grounded
@@ -349,6 +355,8 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
                 },
             ]
             continue
+        except NoRecordedAI:
+            raise
         except LLMUnavailable as exc:
             reasons = [f"LLM unavailable: {exc}"]
             calls.append(
@@ -406,4 +414,9 @@ def extract(doc: RawDocument, client: LLMClient | None) -> ExtractionResult:
             )
     if client is None:
         return extract_labelled(doc)
-    return extract_with_llm(doc, client)
+    try:
+        return extract_with_llm(doc, client)
+    except NoRecordedAI:  # auto mode: nothing recorded and no key -> rules only
+        res = extract_labelled(doc)
+        res.llm_calls = [{"agent": "extraction", "step": "initial", "outcome": "rules_only"}]
+        return res

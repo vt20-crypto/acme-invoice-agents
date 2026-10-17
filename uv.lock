@@ -22,7 +22,6 @@ dependencies = [
     { name = "pdfplumber" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "pyyaml" },
     { name = "streamlit" },
 ]
 
@@ -41,7 +40,6 @@ requires-dist = [
     { name = "pdfplumber", specifier = ">=0.11.10" },
     { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "streamlit", specifier = ">=1.66.0" },
 ]
 

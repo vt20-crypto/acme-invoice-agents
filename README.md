@@ -11,14 +11,16 @@ code decides, and code pays once per invoice.
 make install                      # uv sync
 make test                         # no API key needed: tests replay recorded responses
 make run                          # invoice_1001, code-only, fresh database
-make ui                           # Streamlit app (4 tabs)
+make ui                           # Streamlit app (Process invoice, Dashboard, Review queue)
+make eval                         # expected vs actual decisions for all samples (cache mode)
 uv run python main.py --invoice_path=data/invoices/invoice_1002.txt --llm cache --fresh
 uv run python main.py --batch data/invoices data/synthetic --llm cache --fresh
 ```
 
 CLI: `--invoice_path`, `--batch DIR...`, `--fresh`, `--db`, `--cache`, and
-`--llm live|cache|none`. Structured JSON logs go to stderr; the readable summary to stdout.
-`python main.py reset` wipes and reseeds the database.
+`--llm auto|live|cache|none` (default `auto`). Structured JSON logs go to stderr; the readable summary to stdout.
+`python main.py reset` wipes and reseeds the database. `python main.py eval` prints expected vs
+actual for every sample with the match summary (`make eval`).
 
 ## Architecture
 
@@ -104,6 +106,9 @@ $0.10 by the grok-4.3 price list.
 
 ## LLM provenance
 
+- `auto` (default): per call, the recorded response if there is one, else a live Grok call if
+  `LLM_API_KEY` is set (recorded for next time), else rules only. Each step reports its own
+  provenance (recorded, live, or rules only). Tests and the regression run use strict `cache`.
 - `live`: a real Grok call; the response is written to `cache/llm/<step>/<document>-<request-hash>.json`.
 - `cache`: replays those recorded responses only. A missing entry is a HOLD marked as a system
   issue, never a vendor defect. The request hash covers the exact messages, schema, tools, model

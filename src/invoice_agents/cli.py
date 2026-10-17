@@ -24,7 +24,7 @@ from .presentation import (
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="main.py", description="Acme invoice processing agents")
-    p.add_argument("command", nargs="?", choices=["run", "reset"], default="run")
+    p.add_argument("command", nargs="?", choices=["run", "reset", "eval"], default="run")
     p.add_argument("--invoice_path", help="path to an invoice file (txt, pdf, csv, json, xml)")
     p.add_argument(
         "--batch",
@@ -35,10 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--llm",
-        choices=["live", "cache", "none"],
-        default="cache",
-        help="live: call Grok and record responses; cache: replay recorded responses only; "
-        "none: code only",
+        choices=["auto", "live", "cache", "none"],
+        default="auto",
+        help="auto (default): per call, the recorded response if there is one, else live Grok "
+        "if a key is set, else rules only; live: call Grok and record responses; cache: replay "
+        "recorded responses only; none: code only",
     )
     p.add_argument("--db", default="acme.db", help="SQLite database file")
     p.add_argument("--cache", default="cache/llm", help="LLM response cache directory")
@@ -104,6 +105,27 @@ def render(state: PipelineState, ctx: Context, prior: dict | None) -> str:
     return "\n".join(out)
 
 
+def run_eval(mode: str, cache: str) -> int:
+    """Expected vs actual decisions for every sample invoice, in one mode (strict, never auto)."""
+    from .evaluation import evaluate
+
+    if mode == "auto":
+        mode = "cache"
+    try:
+        ev = evaluate(mode, cache)
+    except LLMUnavailable as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    width = max(len(r["file"]) for r in ev["rows"])
+    print(f"{'file':<{width}}  {'expected':<10} {'actual':<10}")
+    for r in ev["rows"]:
+        mark = "\u2713" if r["match"] else "\u2717"
+        print(f"{r['file']:<{width}}  {r['expected'] or '-':<10} {r['actual']:<10} {mark}")
+    bad_pay = sum(1 for r in ev["rows"] if r["paid"] and r["actual"] != "APPROVE")
+    print(f"\n{ev['summary']} (mode {mode}); {bad_pay} invalid payments")
+    return 0 if ev["matched"] == ev["total"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     db = Database(args.db)
@@ -112,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             db.reset()
             print(f"Database {args.db} reset and reseeded.")
             return 0
+        if args.command == "eval":
+            return run_eval(args.llm, args.cache)
         if not args.invoice_path and not args.batch:
             print("error: --invoice_path or --batch is required", file=sys.stderr)
             return 2

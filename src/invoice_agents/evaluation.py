@@ -10,8 +10,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from .batch import collect_files, result_record, run_batch
 from .db import Database
 from .llm.client import make_client
@@ -22,6 +20,8 @@ SAMPLE_DIRS = [ROOT / "data" / "invoices", ROOT / "data" / "synthetic"]
 
 
 def load_expected() -> list[dict[str, Any]]:
+    import yaml  # dev dependency: only the evaluation command and the tests read expected.yaml
+
     return yaml.safe_load(EXPECTED_PATH.read_text())
 
 

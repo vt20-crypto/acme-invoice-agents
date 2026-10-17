@@ -39,7 +39,7 @@ TIER_TEXT = {
 class Context:
     db: Database
     client: LLMClient | None
-    llm_mode: str  # live | cache | none
+    llm_mode: str  # auto | live | cache | none
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     payer: Any = None  # injectable for tests; defaults to mock_payment
 
@@ -155,6 +155,8 @@ def build_graph(ctx: Context):
         calls = (
             [{"agent": "resolve_items", "step": "tool_round", "provenance": out.provenance}]
             if out.provenance
+            else [{"agent": "resolve_items", "step": "tool_round", "outcome": "rules_only"}]
+            if out.rules_only
             else []
         )
         audit(
@@ -235,7 +237,9 @@ def build_graph(ctx: Context):
             lines.append(f"critic pass ran (revisions: {out.revisions})")
         lines += [f"[{f.severity}] {finding_line(f)}" for f in out.findings]
         for c in out.llm_calls:
-            lines.append(f"LLM {c['agent']}/{c['step']}: provenance={c['provenance']}")
+            lines.append(
+                f"LLM {c['agent']}/{c['step']}: provenance={c.get('provenance') or 'rules only'}"
+            )
         audit(
             state,
             "approve",

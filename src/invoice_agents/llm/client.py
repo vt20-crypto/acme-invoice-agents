@@ -4,6 +4,8 @@
             response to the cache.
 * ``cache`` replays recorded responses only; a missing entry raises CacheMiss (the pipeline
             turns that into a HOLD with a system issue).
+* ``auto``  per call: the recorded response if there is one, else a live call if a key is
+            configured, else NoRecordedAI, which callers turn into their rules-only path.
 * ``none``  means no client at all: callers take their code-only paths.
 
 Cache entries live at ``cache/llm/<step>/<doc-fingerprint16>-<request-hash12>.json`` and hold the
@@ -42,6 +44,10 @@ class LLMUnavailable(RuntimeError):
 
 class CacheMiss(LLMUnavailable):
     """No recorded response for this exact request."""
+
+
+class NoRecordedAI(CacheMiss):
+    """Auto mode: no recorded response and no API key. Callers fall back to rules only."""
 
 
 class BudgetExceeded(LLMUnavailable):
@@ -171,6 +177,30 @@ class CacheTransport(Transport):
             raise CacheMiss(f"{path.name} is not a recorded response")
         r = data["response"]
         return ModelTurn(r.get("content"), r.get("tool_calls", []), data.get("usage", {}))
+
+
+class AutoTransport(Transport):
+    """Recorded response first, then live (which records it), else NoRecordedAI. ``provenance``
+    reports what served the most recent call."""
+
+    def __init__(self, cache: Transport, live: Transport | None):
+        self.cache, self.live = cache, live
+        self.model = cache.model
+        self.provenance = cache.provenance
+
+    def call(self, agent, key, messages, schema_model, tools):
+        try:
+            turn = self.cache.call(agent, key, messages, schema_model, tools)
+            self.provenance = self.cache.provenance
+            return turn
+        except CacheMiss:
+            if self.live is None:
+                raise NoRecordedAI(
+                    f"no recorded response for {agent} and no API key is configured"
+                ) from None
+        turn = self.live.call(agent, key, messages, schema_model, tools)
+        self.provenance = self.live.provenance
+        return turn
 
 
 def _to_responses_input(messages: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]]]:
@@ -384,7 +414,8 @@ class LLMClient:
 
 
 def make_client(mode: str, cache_dir: str | Path = "cache/llm") -> LLMClient | None:
-    """``none`` -> None. ``cache`` -> replay only. ``live`` -> real calls that fill the cache."""
+    """``none`` -> None. ``cache`` -> replay only. ``live`` -> real calls that fill the cache.
+    ``auto`` -> recorded response, else live when a key is set, else rules only."""
     from dotenv import load_dotenv
 
     if mode == "none":
@@ -394,6 +425,12 @@ def make_client(mode: str, cache_dir: str | Path = "cache/llm") -> LLMClient | N
     if mode == "cache":
         return LLMClient(CacheTransport(cache_dir, model))
     key = os.environ.get("LLM_API_KEY", "").strip()
+    if mode == "auto":
+        live = None
+        if key:
+            base = os.environ.get("LLM_BASE_URL", "https://api.x.ai/v1")
+            live = LiveTransport(key, base, model, cache_dir)
+        return LLMClient(AutoTransport(CacheTransport(cache_dir, model), live))
     if not key:
         raise LLMUnavailable("LLM_API_KEY is not set (see .env.example)")
     base = os.environ.get("LLM_BASE_URL", "https://api.x.ai/v1")

@@ -1,0 +1,26 @@
+# Documented baseline decisions for all 22 documents, in batch order
+# (data/invoices sorted by file name, then data/synthetic).
+# Written BEFORE the first live run. Do not edit an entry to make a run pass: a mismatch is a
+# finding to explain (see docs/DECISIONS.md).
+- {file: data/invoices/invoice_1001.txt, decision: APPROVE, why: "clean, $5,000"}
+- {file: data/invoices/invoice_1002.txt, decision: HOLD, why: "GadgetX 20 > stock 5"}
+- {file: data/invoices/invoice_1003.txt, decision: REJECT, why: "two medium risk rules (pressure language, invalid due date) plus stock"}
+- {file: data/invoices/invoice_1004.json, decision: APPROVE, why: "clean, $1,890"}
+- {file: data/invoices/invoice_1004_revised.json, decision: HOLD, why: "revision of a paid invoice"}
+- {file: data/invoices/invoice_1005.json, decision: HOLD, why: "GadgetX 8 > stock 5"}
+- {file: data/invoices/invoice_1006.csv, decision: APPROVE, why: "clean, $2,750"}
+- {file: data/invoices/invoice_1007.csv, decision: REJECT, why: "arithmetic: 14,750 + 885 tax = 15,635 but states 15,525"}
+- {file: data/invoices/invoice_1008.txt, decision: REJECT, why: "all items unknown after the LLM inventory search"}
+- {file: data/invoices/invoice_1009.json, decision: REJECT, why: "negative quantity, blank vendor, totals do not add up"}
+- {file: data/invoices/invoice_1010.txt, decision: APPROVE, why: "reconciles with the $150 shipping charge"}
+- {file: data/invoices/invoice_1011.pdf, decision: APPROVE, why: "clean, $3,000"}
+- {file: data/invoices/invoice_1011.txt, decision: DUPLICATE, why: "same invoice as the PDF"}
+- {file: data/invoices/invoice_1012.pdf, decision: HOLD, why: "vendor identity change (formerly) plus near threshold"}
+- {file: data/invoices/invoice_1012.txt, decision: DUPLICATE, why: "same invoice as the PDF"}
+- {file: data/invoices/invoice_1013.json, decision: REJECT, why: "arithmetic: 21,040 + 1,472.80 tax = 22,512.80 but states 22,562.80"}
+- {file: data/invoices/invoice_1013.pdf, decision: DUPLICATE, why: "same invoice as the JSON"}
+- {file: data/invoices/invoice_1014.xml, decision: HOLD, why: "EUR: payment rail is USD-only"}
+- {file: data/invoices/invoice_1015.csv, decision: APPROVE, why: "clean, $6,500"}
+- {file: data/invoices/invoice_1016.json, decision: HOLD, why: "WidgetC is not in inventory"}
+- {file: data/synthetic/invoice_9001.json, decision: APPROVE, why: "over $10,000, VP and critic approve"}
+- {file: data/synthetic/invoice_9002.txt, decision: REJECT, why: "prompt injection (high risk)"}

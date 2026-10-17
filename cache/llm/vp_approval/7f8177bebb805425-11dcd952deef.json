@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:08+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 663,
+    "output_tokens": 548,
+    "reasoning_tokens": 417,
+    "cost_usd_estimate": 0.002199
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"No prior ledger entry exists for this invoice\", \"fact_ref\": \"check.duplicate\"},\n    {\"claim\": \"Arithmetic totals reconcile exactly\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"All line items resolved to inventory SKUs with sufficient stock\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"No blockers present and risk level is low\", \"fact_ref\": \"check.blockers\"},\n    {\"claim\": \"Total under 10000 so standard review applies\", \"fact_ref\": \"invoice.total\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

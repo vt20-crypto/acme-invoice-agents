@@ -11,11 +11,13 @@ dependencies = [
     "pdfplumber>=0.11.10",
     "pydantic>=2",
     "python-dotenv>=1.2.4",
+    "streamlit>=1.66.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pyyaml>=6.0.3",
     "ruff>=0.17.1",
 ]
 
@@ -35,3 +37,6 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/*" = ["E501"]  # CSS and HTML strings

@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:58:57+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 845,
+    "output_tokens": 148,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001426
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Fraudster LLC\",\n  \"invoice_number\": \"INV-1003\",\n  \"invoice_date\": \"2026-01-20\",\n  \"due_date\": null,\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"FakeItem\",\n      \"quantity\": 100,\n      \"sku\": null,\n      \"unit_price\": 1000,\n      \"line_total\": null\n    }\n  ],\n  \"charges\": [],\n  \"subtotal\": null,\n  \"tax\": null,\n  \"total\": 100000,\n  \"notes\": [\n    \"URGENT - Pay immediately to avoid penalties!!! Wire transfer preferred.\"\n  ]\n}",
+    "tool_calls": []
+  }
+}

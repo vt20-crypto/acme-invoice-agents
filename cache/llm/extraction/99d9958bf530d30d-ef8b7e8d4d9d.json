@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:19+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 949,
+    "output_tokens": 302,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001941
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Consolidated Materials Group\",\n  \"invoice_number\": \"INV-1010\",\n  \"invoice_date\": \"2026-01-27\",\n  \"due_date\": \"2026-02-26\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\"raw_name\": \"WidgetA\", \"quantity\": 8, \"sku\": null, \"unit_price\": 250.00, \"line_total\": 2000.00},\n    {\"raw_name\": \"WidgetB\", \"quantity\": 4, \"sku\": null, \"unit_price\": 500.00, \"line_total\": 2000.00},\n    {\"raw_name\": \"GadgetX\", \"quantity\": 2, \"sku\": null, \"unit_price\": 750.00, \"line_total\": 1500.00},\n    {\"raw_name\": \"WidgetA (rush order)\", \"quantity\": 4, \"sku\": null, \"unit_price\": 300.00, \"line_total\": 1200.00}\n  ],\n  \"charges\": [\n    {\"kind\": \"shipping\", \"description\": \"Shipping\", \"amount\": 150.00}\n  ],\n  \"subtotal\": 6700.00,\n  \"tax\": 335.00,\n  \"total\": 7185.00,\n  \"notes\": [\"Payment Terms: Net 30\", \"Thank you for your business!\"]\n}",
+    "tool_calls": []
+  }
+}

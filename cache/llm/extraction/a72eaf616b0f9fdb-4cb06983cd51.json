@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:10+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 895,
+    "output_tokens": 185,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001581
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"NoProd Industries\",\n  \"invoice_number\": \"INV-1008\",\n  \"invoice_date\": \"2026-01-10\",\n  \"due_date\": \"2026-01-20\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"SuperGizmo\",\n      \"quantity\": 12,\n      \"sku\": null,\n      \"unit_price\": 400.0,\n      \"line_total\": null\n    },\n    {\n      \"raw_name\": \"MegaSprocket\",\n      \"quantity\": 6,\n      \"sku\": null,\n      \"unit_price\": 850.0,\n      \"line_total\": null\n    }\n  ],\n  \"charges\": [],\n  \"subtotal\": null,\n  \"tax\": null,\n  \"total\": 9900.0,\n  \"notes\": []\n}",
+    "tool_calls": []
+  }
+}

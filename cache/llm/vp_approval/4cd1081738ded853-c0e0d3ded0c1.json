@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:02+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 662,
+    "output_tokens": 594,
+    "reasoning_tokens": 476,
+    "cost_usd_estimate": 0.002312
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"The invoice total matches the sum of lines, charges, and tax.\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"All line items resolved to inventory SKUs with sufficient stock on hand.\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"There are no blockers on this invoice.\", \"fact_ref\": \"check.blockers\"},\n    {\"claim\": \"Risk level is low with no risk rules triggered.\", \"fact_ref\": \"risk.level\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

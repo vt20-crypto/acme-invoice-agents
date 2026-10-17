@@ -1,0 +1,37 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:13+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "resolve_items",
+    "messages": 2,
+    "schema": "ResolutionResult",
+    "tools": [
+      "search_inventory"
+    ]
+  },
+  "usage": {
+    "input_tokens": 488,
+    "output_tokens": 208,
+    "reasoning_tokens": 184,
+    "cost_usd_estimate": 0.00113
+  },
+  "response": {
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call-0a01fc4c-259d-4024-9c89-69827034a990-0",
+        "name": "search_inventory",
+        "arguments": "{\"query\":\"SuperGizmo\"}"
+      },
+      {
+        "id": "call-0a01fc4c-259d-4024-9c89-69827034a990-1",
+        "name": "search_inventory",
+        "arguments": "{\"query\":\"MegaSprocket\"}"
+      }
+    ]
+  }
+}

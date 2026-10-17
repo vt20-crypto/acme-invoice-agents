@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:39+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 889,
+    "output_tokens": 171,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001539
+  },
+  "response": {
+    "content": "{\"vendor\": \"Summit Manufacturing Co.\", \"invoice_number\": \"INV-1011\", \"invoice_date\": \"2026-01-20\", \"due_date\": \"2026-02-20\", \"currency\": \"USD\", \"line_items\": [{\"raw_name\": \"WidgetA\", \"quantity\": 6, \"sku\": null, \"unit_price\": 250.0, \"line_total\": 1500.0}, {\"raw_name\": \"WidgetB\", \"quantity\": 3, \"sku\": null, \"unit_price\": 500.0, \"line_total\": 1500.0}], \"charges\": [], \"subtotal\": 3000.0, \"tax\": 0.0, \"total\": 3000.0, \"notes\": [\"Payment Terms: Net 30\"]}",
+    "tool_calls": []
+  }
+}

@@ -1,0 +1,22 @@
+# Theme: Light, Dark and System all work from the app menu (Settings > Theme). Streamlit picks
+# between the two palettes below; our own HTML in app/streamlit_app.py uses inherited text colour
+# and translucent tints so it follows whichever is active.
+[theme]
+font = "sans serif"
+
+[theme.light]
+primaryColor = "#c6613f"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f3f3f0"
+textColor = "#20201f"
+borderColor = "#e4e3dd"
+
+[theme.dark]
+primaryColor = "#cc6641"
+backgroundColor = "#1f1e1c"
+secondaryBackgroundColor = "#2a2927"
+textColor = "#f0efec"
+borderColor = "#3d3b38"
+
+[browser]
+gatherUsageStats = false

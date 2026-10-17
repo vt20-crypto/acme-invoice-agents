@@ -48,7 +48,7 @@ class ScriptedClient(LLMClient):
     def __init__(self, answers):
         self.answers, self.calls = answers, []
 
-    def structured(self, agent, messages, schema_model, *, key=None, step=""):
+    def structured(self, agent, messages, schema_model, *, key=None, step="", prompt_hash=None):
         self.calls.append((agent, step))
         try:
             return self.answers[(agent, step)], "test-double"

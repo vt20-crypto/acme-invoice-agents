@@ -16,6 +16,7 @@ from typing import Any
 
 from ..config import MAX_EXTRACT_RETRIES
 from ..llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
+from ..llm.compat import prompt_hash
 from ..logs import jlog
 from ..models import Charge, Invoice, LineItem
 from ..normalize import number_grounded, numbers_in_text, parse_number, text_grounded
@@ -275,6 +276,8 @@ def extract_labelled(doc: RawDocument) -> ExtractionResult:
 
 # --- LLM extraction --------------------------------------------------------------------
 
+EXTRACTION_USER_TEMPLATE = "Invoice document ({format}):\n\n{text}"
+
 EXTRACTION_SYSTEM = (
     "You extract structured data from one vendor invoice. Copy vendor, invoice number, item "
     "names and every number exactly as written in the document. Do not compute, infer or "
@@ -316,8 +319,12 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
     problem back. If it still fails the result is uncertain."""
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": EXTRACTION_SYSTEM},
-        {"role": "user", "content": f"Invoice document ({doc.format}):\n\n{doc.raw_text}"},
+        {
+            "role": "user",
+            "content": EXTRACTION_USER_TEMPLATE.format(format=doc.format, text=doc.raw_text),
+        },
     ]
+    phash = prompt_hash(EXTRACTION_SYSTEM, EXTRACTION_USER_TEMPLATE)
     calls: list[dict[str, Any]] = []
     last: Invoice | None = None
     reasons: list[str] = []
@@ -325,7 +332,9 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
     for attempt in range(1 + MAX_EXTRACT_RETRIES):
         step = "" if attempt == 0 else f"retry{attempt}"
         try:
-            inv, prov = client.structured("extraction", messages, Invoice, key=doc.key, step=step)
+            inv, prov = client.structured(
+                "extraction", messages, Invoice, key=doc.key, step=step, prompt_hash=phash
+            )
         except SchemaValidationFailed as exc:
             reasons = [f"schema validation failed: {exc.error_text}"]
             calls.append(

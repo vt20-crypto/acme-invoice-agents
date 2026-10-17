@@ -1,9 +1,33 @@
 {
   "provenance": "authored",
   "note": "Hand-written fixture, not a model output",
+  "meta": {
+    "prompt_hash": "40a1fcb631f030e1f6aa805731aa391a4fa3ad522bead711531175df94ed93fd",
+    "schema_hash": "962307cfeb8c6df6f089ebb3a6a7bc8d9290ed752df6d1a0939f8d7d41f85bd4",
+    "input_hash": "95a8b597b2413c8ce665ac1e3f35730051eabd37bcb077d267448c1f5877b6ef",
+    "model": "authored",
+    "settings": {
+      "reasoning_effort": "low"
+    }
+  },
   "tool_calls": [
-    {"name": "search_inventory", "arguments": {"query": "Widget A"}},
-    {"name": "search_inventory", "arguments": {"query": "Widget B"}},
-    {"name": "search_inventory", "arguments": {"query": "gadget"}}
+    {
+      "name": "search_inventory",
+      "arguments": {
+        "query": "Widget A"
+      }
+    },
+    {
+      "name": "search_inventory",
+      "arguments": {
+        "query": "Widget B"
+      }
+    },
+    {
+      "name": "search_inventory",
+      "arguments": {
+        "query": "gadget"
+      }
+    }
   ]
 }

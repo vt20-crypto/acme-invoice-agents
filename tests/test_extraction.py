@@ -87,7 +87,7 @@ def test_pydantic_retry_path_feeds_back_exact_error(tmp_path):
             seen.append(messages[-1]["content"])
             return super().structured(agent, messages, schema_model, **kw)
 
-    res = extract_with_llm(doc, Spy(tmp_path))
+    res = extract_with_llm(doc, Spy(tmp_path, verify=False))
     assert not res.uncertain and res.attempts == 2
     assert res.invoice.total == 5000.0
     assert "failed schema validation" in seen[1] and "line_items.0.quantity" in seen[1]
@@ -99,7 +99,7 @@ def test_grounding_failure_retries_then_marks_uncertain(tmp_path):
     invented = {**GOOD, "vendor": "Gadgets LLC"}
     for step in ("", "retry1", "retry2"):
         write(tmp_path, doc.key, step, invented)
-    res = extract_with_llm(doc, FixtureClient(tmp_path))
+    res = extract_with_llm(doc, FixtureClient(tmp_path, verify=False))
     assert res.uncertain and res.attempts == 3
     assert any("grounding failed" in r and "Gadgets LLC" in r for r in res.reasons)
 
@@ -108,13 +108,13 @@ def test_grounding_recovers_on_retry(tmp_path):
     doc = parse_file(INVOICES / "invoice_1001.txt")
     write(tmp_path, doc.key, "", {**GOOD, "total": 5100.0})
     write(tmp_path, doc.key, "retry1", GOOD)
-    res = extract_with_llm(doc, FixtureClient(tmp_path))
+    res = extract_with_llm(doc, FixtureClient(tmp_path, verify=False))
     assert not res.uncertain and res.attempts == 2
 
 
 def test_missing_fixture_is_uncertain_llm_unavailable(tmp_path):
     doc = parse_file(INVOICES / "invoice_1001.txt")
-    res = extract_with_llm(doc, FixtureClient(tmp_path))
+    res = extract_with_llm(doc, FixtureClient(tmp_path, verify=False))
     assert res.uncertain and "LLM unavailable" in res.reasons[0]
 
 

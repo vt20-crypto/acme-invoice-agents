@@ -1,15 +1,42 @@
 {
   "provenance": "authored",
   "note": "Hand-written fixture, not a model output",
+  "meta": {
+    "prompt_hash": "36f62955244caf425c0a0bcdd392008948679d0243d5ca1efe38fa27d26cc3de",
+    "schema_hash": "1f952f73edddcf2abc7186003a8222920b2fda7d718a3465572ed4ba385afc67",
+    "input_hash": "b5ac46c9c6c0b7d425d6b255451675b92169aa8eef576393f0ae0ddb76eb3c2f",
+    "model": "authored",
+    "settings": {
+      "reasoning_effort": "low"
+    }
+  },
   "response": {
     "decision": "APPROVE",
     "reasons": [
-      {"claim": "Total of 10,750.00 exceeds 10,000, so the strict standard applies; all checks below support approval.", "fact_ref": "invoice.total"},
-      {"claim": "Invoice arithmetic reconciles exactly.", "fact_ref": "validation.arithmetic"},
-      {"claim": "All three line items resolve to inventory SKUs.", "fact_ref": "validation.items"},
-      {"claim": "GadgetX quantity equals stock on hand, which is within stock.", "fact_ref": "stock.GadgetX"},
-      {"claim": "No validation or risk blockers were raised.", "fact_ref": "check.blockers"},
-      {"claim": "Risk score is zero.", "fact_ref": "risk.score"}
+      {
+        "claim": "Total of 10,750.00 exceeds 10,000, so the strict standard applies; all checks below support approval.",
+        "fact_ref": "invoice.total"
+      },
+      {
+        "claim": "Invoice arithmetic reconciles exactly.",
+        "fact_ref": "validation.arithmetic"
+      },
+      {
+        "claim": "All three line items resolve to inventory SKUs.",
+        "fact_ref": "validation.items"
+      },
+      {
+        "claim": "GadgetX quantity equals stock on hand, which is within stock.",
+        "fact_ref": "stock.GadgetX"
+      },
+      {
+        "claim": "No validation or risk blockers were raised.",
+        "fact_ref": "check.blockers"
+      },
+      {
+        "claim": "Risk score is zero.",
+        "fact_ref": "risk.score"
+      }
     ]
   }
 }

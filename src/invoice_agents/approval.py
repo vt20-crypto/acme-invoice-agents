@@ -15,9 +15,13 @@ from typing import Any
 
 from .config import MAX_VP_REVISIONS, VP_REVIEW_THRESHOLD
 from .llm.client import LLMClient, LLMUnavailable, SchemaValidationFailed, failure_code
+from .llm.compat import prompt_hash
 from .models import Critique, Decision, Finding, Invoice, Reason, VPDraft
 
 _RANK = {Decision.APPROVE: 0, Decision.HOLD: 1, Decision.REJECT: 2}
+
+VP_USER_TEMPLATE = "json:{fact_sheet: <fact sheet>}"
+CRITIC_USER_TEMPLATE = "json:{fact_sheet: <fact sheet>, draft: <VP draft>}"
 
 VP_SYSTEM = (
     "You are the VP of Finance at Acme Corp reviewing one invoice that already passed automated "
@@ -115,7 +119,14 @@ def run_approval(
     step = ""
     try:
         for rnd in range(MAX_VP_REVISIONS + 1):
-            draft, prov = client.structured("vp_approval", messages, VPDraft, key=key, step=step)
+            draft, prov = client.structured(
+                "vp_approval",
+                messages,
+                VPDraft,
+                key=key,
+                step=step,
+                prompt_hash=prompt_hash(VP_SYSTEM, VP_USER_TEMPLATE),
+            )
             out.llm_calls.append(
                 {"agent": "vp_approval", "step": step or "draft", "provenance": prov}
             )
@@ -135,6 +146,7 @@ def run_approval(
                     Critique,
                     key=key,
                     step=f"critique{rnd}",
+                    prompt_hash=prompt_hash(CRITIC_SYSTEM, CRITIC_USER_TEMPLATE),
                 )
                 out.critic_ran = True
                 out.llm_calls.append(

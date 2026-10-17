@@ -1,14 +1,38 @@
 {
   "provenance": "authored",
   "note": "Hand-written fixture, not a model output",
+  "meta": {
+    "prompt_hash": "36f62955244caf425c0a0bcdd392008948679d0243d5ca1efe38fa27d26cc3de",
+    "schema_hash": "1f952f73edddcf2abc7186003a8222920b2fda7d718a3465572ed4ba385afc67",
+    "input_hash": "62d4f7369db2e8a8bf64fa7860214969b4ac7c50b22172e9863f4ef197a9902d",
+    "model": "authored",
+    "settings": {
+      "reasoning_effort": "low"
+    }
+  },
   "response": {
     "decision": "APPROVE",
     "reasons": [
-      {"claim": "Total of 6,095.00 is under the 10,000 VP review threshold.", "fact_ref": "invoice.total"},
-      {"claim": "Arithmetic reconciles including 6 percent tax.", "fact_ref": "validation.arithmetic"},
-      {"claim": "All line items map to inventory and the SKUs were re-verified in the database.", "fact_ref": "resolution.tiers"},
-      {"claim": "GadgetX quantity is within stock.", "fact_ref": "stock.GadgetX"},
-      {"claim": "No blockers were raised.", "fact_ref": "check.blockers"}
+      {
+        "claim": "Total of 6,095.00 is under the 10,000 VP review threshold.",
+        "fact_ref": "invoice.total"
+      },
+      {
+        "claim": "Arithmetic reconciles including 6 percent tax.",
+        "fact_ref": "validation.arithmetic"
+      },
+      {
+        "claim": "All line items map to inventory and the SKUs were re-verified in the database.",
+        "fact_ref": "resolution.tiers"
+      },
+      {
+        "claim": "GadgetX quantity is within stock.",
+        "fact_ref": "stock.GadgetX"
+      },
+      {
+        "claim": "No blockers were raised.",
+        "fact_ref": "check.blockers"
+      }
     ]
   }
 }

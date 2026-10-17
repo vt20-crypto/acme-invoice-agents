@@ -1,6 +1,15 @@
 {
   "provenance": "authored",
   "note": "Hand-written fixture, not a model output",
+  "meta": {
+    "prompt_hash": "a224f3680ed432d056cac3b8c3febd64e38cbdcf7ffa8992359a258f612b9805",
+    "schema_hash": "e75fb6241718181f8fa06beff8953eb55ed321b84d60de1d486080ef93f4e890",
+    "input_hash": "a46baf2035c5beddde960bcd724c6330232a2f6c2a5f649ffa9181949c93d1e7",
+    "model": "authored",
+    "settings": {
+      "reasoning_effort": "none"
+    }
+  },
   "response": {
     "vendor": "Northfield Industrial Components LLC",
     "invoice_number": "NIC-20931",
@@ -8,14 +17,34 @@
     "due_date": "2026-03-11",
     "currency": "USD",
     "line_items": [
-      {"raw_name": "Widget-A assembly unit", "sku": null, "quantity": 6, "unit_price": 250.0, "line_total": null},
-      {"raw_name": "Widget-B assembly unit", "sku": null, "quantity": 4, "unit_price": 500.0, "line_total": null},
-      {"raw_name": "GX gadget (model X)", "sku": null, "quantity": 3, "unit_price": 750.0, "line_total": null}
+      {
+        "raw_name": "Widget-A assembly unit",
+        "sku": null,
+        "quantity": 6,
+        "unit_price": 250.0,
+        "line_total": null
+      },
+      {
+        "raw_name": "Widget-B assembly unit",
+        "sku": null,
+        "quantity": 4,
+        "unit_price": 500.0,
+        "line_total": null
+      },
+      {
+        "raw_name": "GX gadget (model X)",
+        "sku": null,
+        "quantity": 3,
+        "unit_price": 750.0,
+        "line_total": null
+      }
     ],
     "charges": [],
     "subtotal": 5750.0,
     "tax": 345.0,
     "total": 6095.0,
-    "notes": ["Payment Terms: Net 30"]
+    "notes": [
+      "Payment Terms: Net 30"
+    ]
   }
 }

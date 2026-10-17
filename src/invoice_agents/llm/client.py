@@ -23,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 
 from ..config import MAX_TOOL_ITERATIONS
 from ..logs import jlog
+from .compat import compat_meta, mismatches
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -108,6 +109,7 @@ class LLMClient(ABC):
         *,
         key: str | None = None,
         step: str = "",
+        prompt_hash: str | None = None,
     ) -> tuple[T, str]:
         """One call returning a validated ``schema_model`` and its provenance label."""
 
@@ -121,6 +123,7 @@ class LLMClient(ABC):
         *,
         key: str | None = None,
         max_iterations: int = MAX_TOOL_ITERATIONS,
+        prompt_hash: str | None = None,
     ) -> ToolRoundResult:
         """Model emits tool calls, we execute them and feed results back, until it returns a
         final answer matching ``schema_model``. Capped at ``max_iterations`` model turns."""
@@ -190,14 +193,22 @@ class LiveClient(LLMClient):
         except ValidationError as exc:
             raise SchemaValidationFailed(str(exc), text) from exc
 
-    def structured(self, agent, messages, schema_model, *, key=None, step=""):
+    def structured(self, agent, messages, schema_model, *, key=None, step="", prompt_hash=None):
         resp = self._create(agent, messages, schema_model)
         obj = self._validate(schema_model, resp.choices[0].message.content or "")
         jlog("llm_call", agent=agent, step=step, provenance="live", model=self.model)
         return obj, "live"
 
     def tool_call_round(
-        self, agent, messages, tools, schema_model, *, key=None, max_iterations=MAX_TOOL_ITERATIONS
+        self,
+        agent,
+        messages,
+        tools,
+        schema_model,
+        *,
+        key=None,
+        max_iterations=MAX_TOOL_ITERATIONS,
+        prompt_hash=None,
     ):
         by_name = {t.name: t for t in tools}
         msgs = list(messages)
@@ -251,12 +262,39 @@ class FixtureClient(LLMClient):
     The returned provenance is whatever the file declares. Multi-turn tool rounds use
     ``<key>__turn0.json``, ``<key>__turn1.json``, ...: a turn holds either ``tool_calls`` (which
     this client really executes against the supplied tools) or the final ``response``.
+
+    Compatibility: each fixture stores ``meta`` (prompt, schema and input hashes, model, settings).
+    With ``verify=True`` (the default) any mismatch raises FixtureStale, so a fixture written for
+    something else is never silently used. ``verify=False`` is for tests that build ad-hoc
+    fixtures. ``stamp=True`` (used by ``invoice_agents.record stamp``) writes the current
+    compatibility metadata into the fixtures instead of verifying it.
     """
 
-    def __init__(self, root: str | Path = "fixtures/llm"):
+    def __init__(
+        self,
+        root: str | Path = "fixtures/llm",
+        *,
+        verify: bool = True,
+        stamp: bool = False,
+        expected_model: str | None = None,
+    ):
         self.root = Path(root)
+        self.verify = verify
+        self.stamp = stamp
+        self.expected_model = expected_model
+        self.current_source: str | None = None
+        self.loaded: list[str] = []  # relative fixture paths consumed
+        self.stamped: list[dict[str, Any]] = []
 
-    def _load(self, agent: str, key: str | None, suffix: str) -> dict[str, Any]:
+    def _load(
+        self,
+        agent: str,
+        key: str | None,
+        suffix: str,
+        messages: list[dict[str, Any]],
+        schema_model: type[BaseModel],
+        prompt: str | None,
+    ) -> dict[str, Any]:
         if not key:
             raise LLMUnavailable(f"{agent}: no fixture key given")
         path = self.root / agent / f"{key}{suffix}.json"
@@ -272,6 +310,30 @@ class FixtureClient(LLMClient):
                 f"{path} refused: missing or invalid 'provenance' (need one of "
                 f"{sorted(VALID_FIXTURE_PROVENANCE)}, got {prov!r})"
             )
+        current = compat_meta(agent, messages, schema_model, prompt, "authored")
+        rel = f"{agent}/{key}{suffix}.json"
+        if self.stamp:
+            meta = {
+                **current,
+                "model": "authored" if prov == "authored" else data.get("meta", {}).get("model"),
+            }
+            ordered = {k: v for k, v in data.items() if k not in ("meta", "response", "tool_calls")}
+            ordered["meta"] = meta
+            for k in ("response", "tool_calls"):
+                if k in data:
+                    ordered[k] = data[k]
+            path.write_text(json.dumps(ordered, indent=2) + "\n")
+            self.stamped.append(
+                {"path": rel, "agent": agent, "step": suffix.lstrip("_") or "initial",
+                 "source_file": self.current_source, "provenance": prov, **meta}
+            )  # fmt: skip
+        elif self.verify:
+            bad = mismatches(data.get("meta"), current, self.expected_model)
+            if bad:
+                raise FixtureStale(
+                    f"{rel} is stale or incompatible with the current run: {', '.join(bad)} differ"
+                )
+        self.loaded.append(rel)
         return data
 
     @staticmethod
@@ -281,20 +343,29 @@ class FixtureClient(LLMClient):
         except ValidationError as exc:
             raise SchemaValidationFailed(str(exc), json.dumps(payload)) from exc
 
-    def structured(self, agent, messages, schema_model, *, key=None, step=""):
-        data = self._load(agent, key, f"__{step}" if step else "")
+    def structured(self, agent, messages, schema_model, *, key=None, step="", prompt_hash=None):
+        suffix = f"__{step}" if step else ""
+        data = self._load(agent, key, suffix, messages, schema_model, prompt_hash)
         prov = data["provenance"]
         jlog("llm_call", agent=agent, step=step, provenance=prov, key=key)
         return self._validate(schema_model, data.get("response")), prov
 
     def tool_call_round(
-        self, agent, messages, tools, schema_model, *, key=None, max_iterations=MAX_TOOL_ITERATIONS
+        self,
+        agent,
+        messages,
+        tools,
+        schema_model,
+        *,
+        key=None,
+        max_iterations=MAX_TOOL_ITERATIONS,
+        prompt_hash=None,
     ):
         by_name = {t.name: t for t in tools}
         trace: list[dict[str, Any]] = []
         prov = "authored"
         for turn in range(max_iterations):
-            data = self._load(agent, key, f"__turn{turn}")
+            data = self._load(agent, key, f"__turn{turn}", messages, schema_model, prompt_hash)
             prov = data["provenance"]
             jlog("llm_call", agent=agent, step=f"turn{turn}", provenance=prov, key=key)
             calls = data.get("tool_calls")

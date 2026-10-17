@@ -37,7 +37,7 @@ def test_code_tier_resolves_without_calling_the_llm(db):
 
 def test_llm_tier_only_sees_names_code_could_not_resolve(db, tmp_path):
     write_fixtures(tmp_path, "k", [{"raw_name": "Wigdet A", "sku": "WidgetA"}])
-    out = resolve_items(inv("WidgetB", "Wigdet A"), db, FixtureClient(tmp_path), "k")
+    out = resolve_items(inv("WidgetB", "Wigdet A"), db, FixtureClient(tmp_path, verify=False), "k")
     assert out.proposed == ["WidgetB", "WidgetA"]
     assert out.tiers == ["code", "llm"] and out.method == "tiered"
     call = out.tool_trace[0]
@@ -46,10 +46,10 @@ def test_llm_tier_only_sees_names_code_could_not_resolve(db, tmp_path):
 
 def test_llm_may_return_null_and_stays_unresolved(db, tmp_path):
     write_fixtures(tmp_path, "k", [{"raw_name": "Wigdet A", "sku": None}])
-    out = resolve_items(inv("Wigdet A"), db, FixtureClient(tmp_path), "k")
+    out = resolve_items(inv("Wigdet A"), db, FixtureClient(tmp_path, verify=False), "k")
     assert out.proposed == [None] and out.tiers == ["unresolved"]
 
 
 def test_llm_unavailable_leaves_lines_unresolved_with_error(db, tmp_path):
-    out = resolve_items(inv("WidgetB", "Wigdet A"), db, FixtureClient(tmp_path), "k")
+    out = resolve_items(inv("WidgetB", "Wigdet A"), db, FixtureClient(tmp_path, verify=False), "k")
     assert out.proposed == ["WidgetB", None] and out.error

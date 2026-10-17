@@ -85,3 +85,47 @@ and prompts, not in `expected.yaml`:
 
 Those prompt changes meant discarding the first cache and re-recording once. The second live batch
 matched 22 of 22. Total live spend for the smoke test and both batches is about $0.10.
+
+## 14. Synthetic edge-case suite (invoice_9010 to invoice_9027)
+Eighteen invoices, one behaviour each, over the seeded inventory (WidgetA 15 at 250, WidgetB 10 at
+500, GadgetX 5 at 750). Every number reconciles to the cent except where the case intends
+otherwise. The expected decision and a one-line reason per case were derived from the policy in
+#4 to #11 and committed before any run. Formats: JSON 5, TXT 6, CSV 4, XML 2, PDF 1 (the PDF is
+a text PDF written by a small throwaway script, as no PDF writer is a dependency).
+
+Results, each mode on its own:
+- Rules only (`--llm none`, scratch database): first run 38/40. The two differences:
+  invoice_9015 (a defect, see #15) and invoice_1012.txt (its expected DUPLICATE needs the OCR-style
+  PDF to be read first, which rules only cannot do, so it holds with extraction_failed; a `none`
+  entry was added for it, with that reason). After the fix, 40/40.
+- Live (`--llm auto` on data/synthetic, which records missing responses and replays the rest): all
+  20 documents matched their expectations. 20 live calls were made (budget cap was 80), 14,677
+  input and 8,355 output tokens, about $0.04 by the cache's own estimate. invoice_9001 and
+  invoice_9002 were already recorded.
+- Strict replay (`make eval`, cache mode): 40/40 match, no cache misses. No prompt changed, so
+  nothing existing had to be re-recorded.
+The suite was written to test the system, but its documents are few and the model saw them only
+once, so it is a regression set, not a held-out benchmark.
+
+`expected.yaml` entries may carry a `none` decision for the rules-only run. 1008 and 9001 got
+theirs before the first run (item mapping and VP review need a model); 1012.txt after it, as
+described above. No `decision` of an existing entry was changed.
+
+## 15. A missing invoice number is a REJECT
+The suite found a real defect. An invoice with no invoice number passed validation and was paid
+under the idempotency key `<vendor>|None` (rules-only run, invoice_9015, before the fix). That
+contradicts the payment design (key = vendor + invoice number) and #11 (a reviewer cannot approve
+an invoice without a number either). Validation now raises `missing_invoice_number` as a REJECT,
+like a missing vendor, with a unit test. The expectation was written from the policy and was not
+changed.
+
+## 16. Export and comparison
+Result rows (file, invoice number, vendor, total, currency, decision, reasons, processed_at,
+ai_provenance, paid) come from one function in `export.py` used by the CLI `--out` and the UI
+downloads. `ai_provenance` is stored in the ledger details at decision time (recorded, live,
+rules_only or code). `paid` is yes only for a row whose final decision is APPROVE and whose payment
+key was sent, so a duplicate never shows as paid. The expected-results comparison matches by file
+name (basename, case-insensitive), ignores case and spacing in decisions, rejects a CSV without
+the `file` and `expected_decision` columns, and lists expected files that were not processed. A
+file called `expected_results.csv` is never collected as an invoice. The UI API key lives only in
+the session state and is passed to the client as an argument; it is not put in the environment.

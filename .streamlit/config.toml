@@ -1,13 +1,22 @@
-# Explicit light theme (colours from the design mockup). Without this Streamlit follows the OS
-# colour scheme, and a dark OS gives light text that the app's cards and page then render on
-# near-white backgrounds.
+# Theme: Light, Dark and System all work from the app menu (Settings > Theme). Streamlit picks
+# between the two palettes below; our own HTML in app/streamlit_app.py uses inherited text colour
+# and translucent tints so it follows whichever is active.
 [theme]
-base = "light"
-primaryColor = "#d97757"
+font = "sans serif"
+
+[theme.light]
+primaryColor = "#c6613f"
 backgroundColor = "#fcfcfb"
 secondaryBackgroundColor = "#f3f3f0"
 textColor = "#20201f"
-font = "sans serif"
+borderColor = "#e4e3dd"
+
+[theme.dark]
+primaryColor = "#cc6641"
+backgroundColor = "#1f1e1c"
+secondaryBackgroundColor = "#2a2927"
+textColor = "#f0efec"
+borderColor = "#3d3b38"
 
 [browser]
 gatherUsageStats = false

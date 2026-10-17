@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ PROVENANCE_LABEL = {
     "live": "live model call",
     "recorded": "recorded model response (cache)",
     "code": "code only (no LLM)",
+    "rules_only": "rules only (no recorded AI response, no API key)",
 }
 
 SYSTEM_ISSUE_TEXT = {
@@ -371,3 +373,27 @@ def extracted_lines(state: dict[str, Any]) -> list[str]:
         out.append(f"{c.kind.title()}: {money(c.amount, cur)}")
     out += [f"Tax: {money(inv.tax, cur)}", f"Total: {money(inv.total, cur)}"]
     return out
+
+
+def call_provenance(call: dict[str, Any]) -> str:
+    """Plain provenance of one recorded step: live, recorded, or rules only."""
+    return provenance_label(
+        call.get("provenance") or ("rules_only" if call.get("outcome") == "rules_only" else None)
+    )
+
+
+def ledger_reason(row: dict[str, Any]) -> str:
+    """One plain sentence for a ledger row, as shown in the dashboard."""
+    status = row.get("review_status") or ""
+    if status == "approved_by_human":
+        return "Approved by a reviewer. Payment sent."
+    if status == "approved_by_human_already_paid":
+        return "Approved by a reviewer; it had already been paid."
+    if status == "rejected_by_human":
+        return "Rejected by a reviewer."
+    return reason_sentence(row["decision"], json.loads(row.get("findings_json") or "[]"))
+
+
+def ledger_details(row: dict[str, Any]) -> dict[str, Any]:
+    """Stored line items and dates for a ledger row ({} for rows saved before details existed)."""
+    return json.loads(row.get("details_json") or "{}")

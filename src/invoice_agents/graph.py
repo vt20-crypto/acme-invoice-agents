@@ -62,6 +62,26 @@ class PipelineState(TypedDict, total=False):
     ledger_id: int
 
 
+def _details(inv: Any, skus: list[str | None]) -> dict[str, Any]:
+    """What a reviewer needs to see later: the lines as written, their SKUs, and the dates."""
+    return {
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
+        "due_date": str(inv.due_date) if inv.due_date else None,
+        "subtotal": inv.subtotal,
+        "tax": inv.tax,
+        "lines": [
+            {
+                "raw_name": li.raw_name,
+                "sku": skus[i] if i < len(skus) else None,
+                "quantity": li.quantity,
+                "unit_price": li.unit_price,
+                "line_total": li.line_total,
+            }
+            for i, li in enumerate(inv.line_items)
+        ],
+    }
+
+
 def _step(name: str, lines: list[str]) -> list[dict[str, Any]]:
     return [{"step": name, "lines": lines}]
 
@@ -315,6 +335,7 @@ def build_graph(ctx: Context):
             vendor=inv.vendor if inv else None,
             invoice_number=inv.invoice_number if inv else None,
             findings_json=json.dumps([f.model_dump() for f in findings]),
+            details_json=json.dumps(_details(inv, val.resolved if val else [])) if inv else None,
         )
         lines = [f"final decision={decision.value}  ledger id={ledger_id}"]
         if decision is not Decision.APPROVE:

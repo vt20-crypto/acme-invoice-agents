@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     source_file TEXT, fingerprint TEXT, vendor_norm TEXT, invoice_number_norm TEXT,
     content_hash TEXT, decision TEXT, total REAL, currency TEXT, duplicate_of INTEGER,
     processed_at TEXT, run_id TEXT,
-    vendor TEXT, invoice_number TEXT, findings_json TEXT, review_status TEXT
+    vendor TEXT, invoice_number TEXT, findings_json TEXT, review_status TEXT, details_json TEXT
 );
 CREATE TABLE IF NOT EXISTS reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,7 +62,7 @@ class Database:
         self.conn.executescript(SCHEMA)
         # Light migration for databases created before the review columns existed.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(invoices)")}
-        for col in ("vendor", "invoice_number", "findings_json", "review_status"):
+        for col in ("vendor", "invoice_number", "findings_json", "review_status", "details_json"):
             if col not in have:
                 self.conn.execute(f"ALTER TABLE invoices ADD COLUMN {col} TEXT")
         self.conn.commit()
@@ -149,12 +149,13 @@ class Database:
         vendor: str | None = None,
         invoice_number: str | None = None,
         findings_json: str | None = None,
+        details_json: str | None = None,
     ) -> int:
         cur = self.conn.execute(
             "INSERT INTO invoices (source_file, fingerprint, vendor_norm, invoice_number_norm, "
             "content_hash, decision, total, currency, duplicate_of, processed_at, run_id, "
-            "vendor, invoice_number, findings_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "vendor, invoice_number, findings_json, details_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 source_file,
                 fingerprint,
@@ -170,6 +171,7 @@ class Database:
                 vendor,
                 invoice_number,
                 findings_json,
+                details_json,
             ),
         )
         self.conn.commit()

@@ -27,6 +27,7 @@ SYSTEM_ISSUE_TEXT = {
     "llm_unavailable": "the LLM is not available",
     "cache_missing": "no recorded LLM response for this document and step",
     "extraction_failed": "the document could not be read in this mode",
+    "invoice_number_unreadable": "the invoice number could not be read; a person must confirm it",
     "item_needs_mapping": "item names need mapping (no inventory search was run)",
     "critic_unresolved": "the approval review did not settle",
     "vp_requires_llm": "VP review needs an LLM",
@@ -176,6 +177,7 @@ _RISK_TEXT = {
 }
 _STATIC = {
     "missing_vendor": "The vendor name is missing",
+    "missing_invoice_number": "The invoice number is missing",
     "missing_total": "The invoice total is missing",
     "missing_items": "The invoice has no line items",
     "missing_due_date": "The due date is missing or could not be read",
@@ -188,6 +190,8 @@ _STATIC = {
     "llm_unavailable": "The LLM is not available for this step",
     "cache_missing": "No recorded LLM response exists for this document and step",
     "extraction_failed": "The document could not be read reliably in this mode",
+    "invoice_number_unreadable": "The invoice number could not be read; a person must check "
+    "the document and confirm it",
 }
 
 

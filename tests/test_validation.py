@@ -117,6 +117,12 @@ def test_non_usd_missing_due_date_and_bad_quantity(db):
     assert "missing_vendor" in codes(run(make(vendor=None), db), "reject")
 
 
+def test_missing_invoice_number_is_rejected(db):
+    # No number means no payment key, so it must never reach the payment step.
+    assert "missing_invoice_number" in codes(run(make(invoice_number=None), db), "reject")
+    assert "missing_invoice_number" not in codes(run(make(), db))
+
+
 def _record(db, inv, res, decision="APPROVE", source="a.txt"):
     return db.record_invoice(
         source_file=source,

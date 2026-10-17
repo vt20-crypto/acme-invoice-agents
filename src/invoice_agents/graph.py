@@ -14,6 +14,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .approval import ApprovalOutcome, code_verdict, run_approval
 from .db import Database
+from .export import ai_provenance
 from .ingestion.extractor import ExtractionResult, extract
 from .ingestion.parsers import RawDocument, parse_file
 from .llm.client import LLMClient
@@ -62,9 +63,11 @@ class PipelineState(TypedDict, total=False):
     ledger_id: int
 
 
-def _details(inv: Any, skus: list[str | None]) -> dict[str, Any]:
-    """What a reviewer needs to see later: the lines as written, their SKUs, and the dates."""
+def _details(inv: Any, skus: list[str | None], calls: list[dict[str, Any]]) -> dict[str, Any]:
+    """What a reviewer needs to see later: the lines as written, their SKUs, the dates and how
+    the model was used."""
     return {
+        "ai_provenance": ai_provenance(calls),
         "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
         "due_date": str(inv.due_date) if inv.due_date else None,
         "subtotal": inv.subtotal,
@@ -100,11 +103,15 @@ def build_graph(ctx: Context):
         ex = extract(doc, ctx.client)
         findings: list[Finding] = []
         if ex.uncertain:
+            unreadable = ex.failure_code == "invoice_number_unreadable"
             findings.append(
                 Finding(
                     code=ex.failure_code or "extraction_failed",
                     severity="hold",
-                    message="System issue: the document could not be extracted reliably "
+                    message="System issue: an invoice number appears in the document but could "
+                    "not be read; a person must check it and confirm the number."
+                    if unreadable
+                    else "System issue: the document could not be extracted reliably "
                     "(this is not a vendor defect).",
                     evidence="; ".join(ex.reasons),
                     stage="extraction",
@@ -276,8 +283,8 @@ def build_graph(ctx: Context):
 
     def pay(state: PipelineState) -> dict[str, Any]:
         inv = state["invoice"]
-        assert inv is not None and inv.vendor and inv.total is not None
-        key = f"{vendor_key(inv)}|{number_key(inv)}"
+        assert inv is not None
+        key = f"{vendor_key(inv) or ''}|{number_key(inv) or ''}"
         res = pay_invoice(
             db,
             vendor=inv.vendor,
@@ -335,7 +342,11 @@ def build_graph(ctx: Context):
             vendor=inv.vendor if inv else None,
             invoice_number=inv.invoice_number if inv else None,
             findings_json=json.dumps([f.model_dump() for f in findings]),
-            details_json=json.dumps(_details(inv, val.resolved if val else [])) if inv else None,
+            details_json=json.dumps(
+                _details(inv, val.resolved if val else [], state.get("llm_calls", []))
+            )
+            if inv
+            else None,
         )
         lines = [f"final decision={decision.value}  ledger id={ledger_id}"]
         if decision is not Decision.APPROVE:

@@ -161,6 +161,8 @@ def validate(
     # 3. Required fields.
     if not invoice.vendor:
         add("missing_vendor", "reject", "Vendor is missing.")
+    if not invoice.invoice_number:
+        add("missing_invoice_number", "reject", "Invoice number is missing.")
     if invoice.total is None:
         add("missing_total", "reject", "Invoice total is missing.")
     if not invoice.line_items:

@@ -1,0 +1,19 @@
+{
+  "invoice_number": "AV-2204",
+  "vendor": {
+    "name": "Avalon Trade Supply",
+    "address": "77 Market Lane, Tulsa, OK 74103"
+  },
+  "date": "2026-02-19",
+  "due_date": "2026-03-21",
+  "line_items": [
+    {"item": "Wdgt-A (blue)", "quantity": 6, "unit_price": 250.00},
+    {"item": "Widget Type B", "quantity": 3, "unit_price": 500.00}
+  ],
+  "subtotal": 3000.00,
+  "tax_rate": 0.0,
+  "tax_amount": 0.00,
+  "total": 3000.00,
+  "currency": "USD",
+  "payment_terms": "Net 30"
+}

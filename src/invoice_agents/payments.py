@@ -28,13 +28,21 @@ class PaymentResult:
 def pay_invoice(
     db: Database,
     *,
-    vendor: str,
-    amount: float,
+    vendor: str | None,
+    amount: float | None,
     currency: str,
     idempotency_key: str,
     payer: Callable[[str, float], Any] | None = None,
 ) -> PaymentResult:
-    """Insert the payment row first (UNIQUE key); call the payer only if the insert succeeded."""
+    """Last line of defence: refuse unless vendor, invoice number (in the key), a positive amount
+    and USD are all present, whatever any earlier step decided. Then insert the payment row first
+    (UNIQUE key); call the payer only if the insert succeeded."""
+    if not (vendor or "").strip():
+        return PaymentResult("refused", "vendor is missing")
+    if not idempotency_key or not all(part.strip() for part in idempotency_key.split("|")):
+        return PaymentResult("refused", "invoice number is missing, so there is no payment key")
+    if amount is None or not amount > 0:
+        return PaymentResult("refused", "amount is missing or not positive")
     if currency.upper() != PAYABLE_CURRENCY:
         return PaymentResult("refused", f"payment rail is {PAYABLE_CURRENCY}-only, got {currency}")
     try:

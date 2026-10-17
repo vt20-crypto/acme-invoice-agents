@@ -20,6 +20,9 @@ from .presentation import (
 )
 
 SUPPORTED = {".txt", ".pdf", ".csv", ".json", ".xml"}
+EXPECTED_RESULTS_NAME = (
+    "expected_results.csv"  # answer key next to the reviewer pack, not an invoice
+)
 
 
 def collect_files(dirs: Iterable[str | Path]) -> list[Path]:
@@ -28,7 +31,11 @@ def collect_files(dirs: Iterable[str | Path]) -> list[Path]:
     ``invoice_1004_revised.json`` because '.' sorts before '_'. Shell/locale ordering may differ."""
     out: list[Path] = []
     for d in dirs:
-        files = [p for p in Path(d).iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED]
+        files = [
+            p
+            for p in Path(d).iterdir()
+            if p.is_file() and p.suffix.lower() in SUPPORTED and p.name != EXPECTED_RESULTS_NAME
+        ]
         out += sorted(files, key=lambda p: p.name)
     return out
 

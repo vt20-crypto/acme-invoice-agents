@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:07+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 663,
+    "output_tokens": 659,
+    "reasoning_tokens": 538,
+    "cost_usd_estimate": 0.002476
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\n      \"claim\": \"Arithmetic validated with no discrepancies\",\n      \"fact_ref\": \"validation.arithmetic\"\n    },\n    {\n      \"claim\": \"All line items resolved to inventory SKUs with sufficient stock\",\n      \"fact_ref\": \"validation.items\"\n    },\n    {\n      \"claim\": \"No blockers or duplicates identified\",\n      \"fact_ref\": \"check.blockers\"\n    },\n    {\n      \"claim\": \"Risk level is low\",\n      \"fact_ref\": \"risk.level\"\n    }\n  ]\n}",
+    "tool_calls": []
+  }
+}

@@ -1,0 +1,6 @@
+Invoice Number,Vendor,Date,Due Date,Item,Qty,Unit Price,Line Total
+LP-8812,Lone Pine Machining,2026-03-10,2026-03-01,WidgetA,10,250.00,2500.00
+LP-8812,Lone Pine Machining,2026-03-10,2026-03-01,WidgetB,2,500.00,1000.00
+,,,,,,Subtotal:,3500.00
+,,,,,,Tax (0%):,0.00
+,,,,,,Total:,3500.00

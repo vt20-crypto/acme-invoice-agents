@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:36+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 4,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 839,
+    "output_tokens": 877,
+    "reasoning_tokens": 635,
+    "cost_usd_estimate": 0.003241
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\n      \"claim\": \"Invoice total exceeds 10000 and meets strict approval criteria of no blockers, low risk, reconciled arithmetic and enough stock\",\n      \"fact_ref\": \"policy.vp_threshold\"\n    },\n    {\n      \"claim\": \"Risk level is low with no risk rules triggered\",\n      \"fact_ref\": \"risk.level\"\n    },\n    {\n      \"claim\": \"No blockers present\",\n      \"fact_ref\": \"check.blockers\"\n    },\n    {\n      \"claim\": \"Arithmetic validation confirms total 11550 equals lines plus tax\",\n      \"fact_ref\": \"validation.arithmetic\"\n    },\n    {\n      \"claim\": \"GadgetX stock sufficient: needs 3 on hand 5\",\n      \"fact_ref\": \"stock.GadgetX\"\n    },\n    {\n      \"claim\": \"WidgetA stock sufficient: needs 15 on hand 15\",\n      \"fact_ref\": \"stock.WidgetA\"\n    },\n    {\n      \"claim\": \"WidgetB stock sufficient: needs 10 on hand 10\",\n      \"fact_ref\": \"stock.WidgetB\"\n    }\n  ]\n}",
+    "tool_calls": []
+  }
+}

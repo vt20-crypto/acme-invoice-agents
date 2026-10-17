@@ -1,0 +1,14 @@
+INVOCE
+
+Vndr: Brightline Tools
+Inv#: BT-0927
+Dt: Feb 25 2026
+Due Dt: 2026-03-27
+
+Itms:
+  WidgetA  Qty 6   @ $250 ea
+  WidgetB  Qty 2   @ $500 ea
+
+Amt: $2,500.00
+
+Pymnt Terms: Net 30

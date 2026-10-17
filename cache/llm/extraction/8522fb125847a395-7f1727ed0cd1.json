@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:08+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 886,
+    "output_tokens": 146,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001473
+  },
+  "response": {
+    "content": "{\"vendor\":\"Harbor Industrial Parts\",\"invoice_number\":\"HI-5520\",\"invoice_date\":\"2026-02-11\",\"due_date\":\"2026-03-13\",\"currency\":\"USD\",\"line_items\":[{\"raw_name\":\"WidgetA\",\"quantity\":15,\"sku\":null,\"unit_price\":250,\"line_total\":3750},{\"raw_name\":\"WidgetB\",\"quantity\":10,\"sku\":null,\"unit_price\":500,\"line_total\":5000},{\"raw_name\":\"GadgetX\",\"quantity\":3,\"sku\":null,\"unit_price\":750,\"line_total\":2250}],\"charges\":[],\"subtotal\":11000,\"tax\":550,\"total\":11550,\"notes\":[\"Payment Terms: Net 30\"]}",
+    "tool_calls": []
+  }
+}

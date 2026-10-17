@@ -195,9 +195,9 @@ def extract_labelled(doc: RawDocument) -> ExtractionResult:
     # Labels may share a line ("Vendor: X Due: Y"), so the vendor value stops at the next label.
     vendor = _label(t, r"^\s*vendor\s*:\s*(.+?)(?=\s+(?:due|date|terms)\b\s*:|$)")
     number = (
-        _label(t, r"^\s*invoice\s*(?:number|no\.?)\s*[:#]\s*([\w-]+)")
-        or _label(t, r"^\s*invoice\s*#\s*([\w-]+)")
-        or _label(t, r"^\s*invoice\s*:\s*([\w-]+)")
+        _label(t, r"^\s*invoice[ \t]*(?:number|no\.?)[ \t]*[:#][ \t]*([\w-]+)")
+        or _label(t, r"^\s*invoice[ \t]*#[ \t]*([\w-]+)")
+        or _label(t, r"^\s*invoice[ \t]*:[ \t]*([\w-]+)")
     )
     items: list[LineItem] = []
     for line in t.splitlines():
@@ -400,7 +400,42 @@ def extract_with_llm(doc: RawDocument, client: LLMClient) -> ExtractionResult:
     )
 
 
+_NUMBER_LABELS = (
+    re.compile(r"\b(?:invoice|inv)\.?\s*(?:number|num|no\.?|#|id)\s*[:#.\-]?(.*)$", re.I),
+    re.compile(r"\binvoice\s*:(.*)$", re.I),
+)
+
+
+def shows_invoice_number(text: str) -> bool:
+    """True if some line carries an invoice-number label followed by a value. If the document
+    shows that and extraction still found no number, the number was not read, not absent."""
+    for line in text.splitlines():
+        for pat in _NUMBER_LABELS:
+            m = pat.search(line)
+            if m and m.group(1).strip():
+                return True
+    return False
+
+
+def flag_unreadable_number(doc: RawDocument, res: ExtractionResult) -> ExtractionResult:
+    """Policy: a missing invoice number is a REJECT only when it is confidently absent
+    (structured source without the field, or complete text extraction with no number in the
+    text). If the text shows a number the extraction did not capture, hold for a person."""
+    inv = res.invoice
+    if res.uncertain or inv is None or inv.invoice_number or doc.structured is not None:
+        return res
+    if shows_invoice_number(doc.raw_text):
+        res.uncertain = True
+        res.failure_code = "invoice_number_unreadable"
+        res.reasons.append("the document shows an invoice number but none was extracted")
+    return res
+
+
 def extract(doc: RawDocument, client: LLMClient | None) -> ExtractionResult:
+    return flag_unreadable_number(doc, _extract(doc, client))
+
+
+def _extract(doc: RawDocument, client: LLMClient | None) -> ExtractionResult:
     if doc.structured is not None:
         try:
             return ExtractionResult(extract_structured(doc), False, "code")

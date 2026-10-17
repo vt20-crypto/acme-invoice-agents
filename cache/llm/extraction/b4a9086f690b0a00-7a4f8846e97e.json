@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T08:00:40+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 847,
+    "output_tokens": 189,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001531
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Brightline Tools\",\n  \"invoice_number\": \"BT-0927\",\n  \"invoice_date\": \"2026-02-25\",\n  \"due_date\": \"2026-03-27\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"WidgetA\",\n      \"quantity\": 6,\n      \"sku\": null,\n      \"unit_price\": 250,\n      \"line_total\": null\n    },\n    {\n      \"raw_name\": \"WidgetB\",\n      \"quantity\": 2,\n      \"sku\": null,\n      \"unit_price\": 500,\n      \"line_total\": null\n    }\n  ],\n  \"charges\": [],\n  \"subtotal\": null,\n  \"tax\": null,\n  \"total\": 2500,\n  \"notes\": [\n    \"Pymnt Terms: Net 30\"\n  ]\n}",
+    "tool_calls": []
+  }
+}

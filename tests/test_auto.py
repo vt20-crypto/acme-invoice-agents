@@ -75,4 +75,4 @@ def test_auto_with_nothing_recorded_and_no_key_processes_with_rules_only(tmp_pat
 def test_eval_command_prints_expected_vs_actual_and_summary(capsys, tmp_path):
     rc = main(["eval", "--llm", "cache", f"--db={tmp_path / 'x.db'}"])
     out = capsys.readouterr().out
-    assert rc == 0 and "22/22 match" in out and "✓" in out and "✗" not in out
+    assert rc == 0 and "40/40 match" in out and "✓" in out and "✗" not in out

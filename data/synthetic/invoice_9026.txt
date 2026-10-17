@@ -1,0 +1,19 @@
+INVOICE #GR-8845
+
+Bill To: Acme Corp Receiving
+
+Vendor: Greenfield Distribution
+Date: February 24, 2026
+Due Date: March 26, 2026
+
+Description                Qty     Rate        Amount
+-------------------------------------------------------
+WidgetA                     4      $250.00     $1,000.00
+GadgetX                     2      $750.00     $1,500.00
+                                           -----------
+                               Subtotal:     $2,500.00
+                               Sales Tax:      $200.00
+                               Shipping:        $75.00
+                               TOTAL:        $2,775.00
+
+Payment Terms: Net 30

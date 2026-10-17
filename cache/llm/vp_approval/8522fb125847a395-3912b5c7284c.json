@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:17+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 680,
+    "output_tokens": 749,
+    "reasoning_tokens": 604,
+    "cost_usd_estimate": 0.002723
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"Invoice total exceeds 10000 and meets strict approval criteria of no blockers, low risk, reconciled arithmetic and enough stock\", \"fact_ref\": \"policy.vp_threshold\"},\n    {\"claim\": \"Risk level is low with no risk rules triggered\", \"fact_ref\": \"risk.level\"},\n    {\"claim\": \"No blockers present\", \"fact_ref\": \"check.blockers\"},\n    {\"claim\": \"Arithmetic validation confirms total 11550 equals lines plus tax\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"All stock levels are sufficient\", \"fact_ref\": \"stock.GadgetX\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

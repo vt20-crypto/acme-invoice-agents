@@ -415,7 +415,8 @@ class LLMClient:
 
 def make_client(mode: str, cache_dir: str | Path = "cache/llm") -> LLMClient | None:
     """``none`` -> None. ``cache`` -> replay only. ``live`` -> real calls that fill the cache.
-    ``auto`` -> recorded response, else live when a key is set, else rules only."""
+    ``auto`` -> recorded response, else live when a key is set, else rules only. The key
+    comes from LLM_API_KEY (environment or .env) only."""
     from dotenv import load_dotenv
 
     if mode == "none":

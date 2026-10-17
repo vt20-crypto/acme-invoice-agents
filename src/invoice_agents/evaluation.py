@@ -1,7 +1,7 @@
 """Expected-vs-actual evaluation for one execution mode.
 
 ``tests/regression/expected.yaml`` holds the documented baseline decisions. Modes are always
-evaluated separately.
+evaluated separately; an entry may carry a ``none`` decision for the rules-only run.
 """
 
 from __future__ import annotations
@@ -43,12 +43,13 @@ def evaluate(mode: str, cache_dir: str | Path | None = None) -> dict[str, Any]:
         rec = result_record(state, ctx.run_id)
         name = Path(state["path"]).name
         exp = expected.get(name, {})
+        want = exp.get("none", exp.get("decision")) if mode == "none" else exp.get("decision")
         rows.append(
             {
                 "file": name,
-                "expected": exp.get("decision"),
+                "expected": want,
                 "actual": rec["decision"],
-                "match": exp.get("decision") == rec["decision"],
+                "match": want == rec["decision"],
                 "why_expected": exp.get("why", ""),
                 "reason": rec["reason"],
                 "cause": rec["cause"],

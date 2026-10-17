@@ -67,7 +67,7 @@ in `tests/regression/expected.yaml`, written before the first live run.
 | invoice_1002.txt | HOLD | HOLD ✓ | Ordered 20 GadgetX, only 5 in stock. Not paid. |
 | invoice_1003.txt | REJECT | REJECT ✓ | Risk is high: pressure or urgency wording, an invalid due date (+2 more). Not paid. |
 | invoice_1004.json | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
-| invoice_1004_revised.json | HOLD | HOLD ✓ | Revision of invoice_1004.json: total changed from $1,890.00 to $5,940.00 (+4,050.00); the original was already paid. Not paid. |
+| invoice_1004_revised.json | HOLD | HOLD ✓ | Revision of INV-1004: total changed from $1,890.00 to $5,940.00 (+$4,050.00); the original was already paid. Not paid. |
 | invoice_1005.json | HOLD | HOLD ✓ | Ordered 8 GadgetX, only 5 in stock. Not paid. |
 | invoice_1006.csv | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
 | invoice_1007.csv | REJECT | REJECT ✓ | Invoice states $15,525.00 but lines, charges and tax add up to $15,635.00 (+2 more). Not paid. |
@@ -75,11 +75,11 @@ in `tests/regression/expected.yaml`, written before the first live run.
 | invoice_1009.json | REJECT | REJECT ✓ | The vendor name is missing (+3 more). Not paid. |
 | invoice_1010.txt | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
 | invoice_1011.pdf | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
-| invoice_1011.txt | DUPLICATE | DUPLICATE ✓ | Same invoice already processed (invoice_1011.pdf, APPROVE); nothing to do |
+| invoice_1011.txt | DUPLICATE | DUPLICATE ✓ | Already processed earlier as INV-1011 (approved and paid). Nothing to do. |
 | invoice_1012.pdf | HOLD | HOLD ✓ | Risk is medium: the vendor name changed, total just under $10,000. Not paid. |
-| invoice_1012.txt | DUPLICATE | DUPLICATE ✓ | Same invoice already processed (invoice_1012.pdf, HOLD); nothing to do |
+| invoice_1012.txt | DUPLICATE | DUPLICATE ✓ | Already processed earlier as INV-1012 (held for review). Nothing to do. |
 | invoice_1013.json | REJECT | REJECT ✓ | Invoice states $22,562.80 but lines, charges and tax add up to $22,512.80 (+3 more). Not paid. |
-| invoice_1013.pdf | DUPLICATE | DUPLICATE ✓ | Same invoice already processed (invoice_1013.json, REJECT); nothing to do |
+| invoice_1013.pdf | DUPLICATE | DUPLICATE ✓ | Already processed earlier as INV-1013 (rejected). Nothing to do. |
 | invoice_1014.xml | HOLD | HOLD ✓ | Invoice is in EUR; the payment rail is USD-only, so it is held (no currency conversion). Not paid. |
 | invoice_1015.csv | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
 | invoice_1016.json | HOLD | HOLD ✓ | Not found in inventory: WidgetC. Not paid. |

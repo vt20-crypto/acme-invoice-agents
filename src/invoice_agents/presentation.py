@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,28 @@ SYSTEM_ISSUE_TEXT = {
 
 def decision_badge(decision: str) -> str:
     return DECISION_BADGE.get(decision, decision)
+
+
+DECISION_WORD = {
+    "APPROVE": "approved and paid",
+    "HOLD": "held for review",
+    "REJECT": "rejected",
+    "DUPLICATE": "a duplicate",
+}
+
+
+def decision_word(decision: str) -> str:
+    return DECISION_WORD.get(decision, decision.lower())
+
+
+def display_number(raw: str | None) -> str:
+    """Invoice number as shown to people: trimmed and upper-cased, and a bare number gets the
+    INV- prefix ('1002' -> 'INV-1002'). The raw value is kept for technical details only."""
+    if not raw or not str(raw).strip():
+        return "\u2014"
+    t = re.sub(r"\s+", " ", str(raw).strip().upper())
+    m = re.fullmatch(r"(?:INV[\s_-]*)?(\d+)", t)
+    return f"INV-{m.group(1)}" if m else t
 
 
 def provenance_label(provenance: str | None) -> str:
@@ -103,9 +126,10 @@ def vendor_message(
     """Simple template for a rejected invoice (a person sends it; nothing is sent automatically)."""
     reasons = [f"- {plain(d)}" for d in blocking(findings) if d["kind"] == "business"]
     body = "\n".join(reasons) or "- The invoice could not be validated."
+    label = display_number(number) if number else "(number missing)"
     return (
         f"Dear {vendor or 'vendor'},\n\n"
-        f"We could not process invoice {number or '(number missing)'} for these reasons:\n"
+        f"We could not process invoice {label} for these reasons:\n"
         f"{body}\n\nPlease correct the issues and resubmit.\n\nAccounts Payable, Acme Corp"
     )
 
@@ -164,6 +188,18 @@ _STATIC = {
 }
 
 
+def _earlier(x: dict[str, Any]) -> str:
+    return (
+        display_number(x.get("original_number"))
+        if x.get("original_number")
+        else "an earlier invoice"
+    )
+
+
+def _signed_money(delta: float, currency: str) -> str:
+    return ("+" if delta >= 0 else "-") + money(abs(delta), currency)
+
+
 def plain(f: Finding | dict[str, Any]) -> str:
     """One short human sentence for a finding (the code stays available as a tag)."""
     d = _as_dict(f)
@@ -204,18 +240,19 @@ def plain(f: Finding | dict[str, Any]) -> str:
             )
         if c == "duplicate":
             return (
-                f"Same invoice already processed ({x['original_file']}, {x['original_decision']}); "
-                "nothing to do"
+                f"Already processed earlier as {_earlier(x)} "
+                f"({decision_word(x['original_decision'])}). Nothing to do."
             )
         if c == "revision":
             delta = ""
             if x.get("original_total") is not None and x.get("new_total") is not None:
+                diff = _signed_money(x["new_total"] - x["original_total"], cur)
                 delta = (
                     f": total changed from {money(x['original_total'], cur)} to "
-                    f"{money(x['new_total'], cur)} ({x['new_total'] - x['original_total']:+,.2f})"
+                    f"{money(x['new_total'], cur)} ({diff})"
                 )
             paid = "; the original was already paid" if x.get("paid") else ""
-            return f"Revision of {x['original_file']}{delta}{paid}"
+            return f"Revision of {_earlier(x)}{delta}{paid}"
         if c == "sku_not_in_db":
             return f"Suggested SKU {x['sku']} for {x['item']} does not exist in inventory"
         if c == "risk_invalid_due_date":
@@ -321,7 +358,7 @@ def extracted_lines(state: dict[str, Any]) -> list[str]:
     res = state.get("resolve")
     out = [
         f"Vendor: {inv.vendor or '—'}",
-        f"Invoice number: {inv.invoice_number or '—'}",
+        f"Invoice number: {display_number(inv.invoice_number)}",
         f"Invoice date: {inv.invoice_date or '—'}   Due: {inv.due_date or '—'}",
     ]
     for i, li in enumerate(inv.line_items):

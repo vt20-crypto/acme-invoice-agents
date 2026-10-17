@@ -127,6 +127,7 @@ def validate(
                     f"({Path(orig['source_file']).name}, {orig['decision']}).",
                     original_id=orig["id"],
                     original_file=Path(orig["source_file"]).name,
+                    original_number=orig["invoice_number"],
                     original_decision=orig["decision"],
                 )
                 res.facts["check.duplicate"] = f"duplicate of ledger #{orig['id']}"
@@ -145,6 +146,7 @@ def validate(
                 f"({Path(orig['source_file']).name}, {orig['decision']}).{delta}{paid}",
                 original_id=orig["id"],
                 original_file=Path(orig["source_file"]).name,
+                original_number=orig["invoice_number"],
                 original_decision=orig["decision"],
                 original_total=orig["total"],
                 new_total=invoice.total,

@@ -19,6 +19,7 @@ from invoice_agents.graph import Context, process_invoice
 from invoice_agents.llm.client import LLMUnavailable, make_client
 from invoice_agents.presentation import (
     decision_badge,
+    display_number,
     extracted_lines,
     money,
     plain,
@@ -57,6 +58,11 @@ CSS = """
 .m { background:#f3f3f0; border-radius:8px; padding:10px 12px; }
 .m .k { font-size:12px; color:#6d6b67; margin:0; } .m .v { font-size:20px; font-weight:500; margin:0; }
 .lbl { font-size:12px; color:#6d6b67; margin:1rem 0 6px; }
+.tbl { width:100%; border-collapse:collapse; font-size:14px; color:#20201f; }
+.tbl th { text-align:left; font-weight:500; font-size:13px; color:#6d6b67; padding:8px 10px;
+          border-bottom:1px solid #e4e3dd; background:#f9f9f7; }
+.tbl td { padding:8px 10px; border-bottom:0.5px solid #e4e3dd; vertical-align:top; }
+.tbl td.nw { white-space:nowrap; }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:12px; white-space:pre-wrap; }
 </style>
 """
@@ -78,6 +84,23 @@ def sample_files() -> list[Path]:
 def pill(decision: str, big: bool = False) -> str:
     style = ' style="font-size:15px;padding:4px 12px"' if big else ""
     return f'<span class="pill {TONE[decision]}"{style}>{esc(decision_badge(decision))}</span>'
+
+
+def html_table(rows: list[dict], nowrap: tuple[str, ...] = ()) -> str:
+    """Plain HTML table so long reasons wrap instead of being cut off."""
+    if not rows:
+        return ""
+    head = "".join(f"<th>{esc(k)}</th>" for k in rows[0])
+    body = "".join(
+        "<tr>"
+        + "".join(
+            f'<td class="nw">{esc(v)}</td>' if k in nowrap else f"<td>{esc(v)}</td>"
+            for k, v in r.items()
+        )
+        + "</tr>"
+        for r in rows
+    )
+    return f'<table class="tbl"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
 
 
 def metric(label: str, value: str) -> str:
@@ -129,11 +152,17 @@ def client_for(mode: str):
 def decision_card(rec: dict) -> str:
     d = rec["decision"]
     cur = rec["currency"] or "USD"
-    who = " · ".join(x for x in (rec["vendor"], rec["invoice_number"]) if x) or "Unknown vendor"
+    number = display_number(rec["invoice_number"]) if rec["invoice_number"] else None
+    who = " · ".join(x for x in (rec["vendor"], number) if x) or "Unknown vendor"
+    hint = (
+        '<p class="why">Use Reset database in the sidebar to start over.</p>'
+        if d == "DUPLICATE"
+        else ""
+    )
     return (
         f'<div class="card {TONE[d]}"><div class="row">{pill(d, True)}'
         f'<span class="big">{esc(money(rec["total"], cur))}</span></div>'
-        f'<p class="who">{esc(who)}</p><p class="why">{esc(rec["reason"])}</p></div>'
+        f'<p class="who">{esc(who)}</p><p class="why">{esc(rec["reason"])}</p>{hint}</div>'
     )
 
 
@@ -165,7 +194,12 @@ def render_result(state: dict, rec: dict) -> None:
         with st.expander("Message to the vendor (template, not sent)"):
             st.text(rec["vendor_message"])
     with st.expander("Technical details"):
-        st.write(f"File: {state['path']}  \nFingerprint: {state['doc'].fingerprint}")
+        inv = state.get("invoice")
+        raw_number = inv.invoice_number if inv and inv.invoice_number else "not found"
+        st.write(
+            f"File: {state['path']}  \nInvoice number as written: {raw_number}  \n"
+            f"Fingerprint: {state['doc'].fingerprint}"
+        )
         calls = state.get("llm_calls", [])
         st.write(
             "LLM steps: "
@@ -175,7 +209,9 @@ def render_result(state: dict, rec: dict) -> None:
             )
         )
         for f in state.get("findings", []):
-            st.write(f"- {plain(f)}  `{f.code}` ({f.severity}, {f.kind})")
+            earlier = f.data.get("original_file")
+            seen = f" Earlier file: {earlier}." if earlier else ""
+            st.write(f"- {plain(f)}  `{f.code}` ({f.severity}, {f.kind}).{seen}")
         for step in state["steps"]:
             st.text(step["step"] + "\n  " + "\n  ".join(step["lines"]))
         res = state.get("resolve")
@@ -267,7 +303,7 @@ def tab_dashboard(mode: str) -> None:
     rows = []
     for r in recs:
         line = {
-            "Invoice": r["invoice_number"] or Path(r["file"]).name,
+            "Invoice": display_number(r["invoice_number"]),
             "Vendor": r["vendor"] or "—",
             "Decision": decision_badge(r["decision"]),
             "Total": money(r["total"], r["currency"] or "USD"),
@@ -275,7 +311,7 @@ def tab_dashboard(mode: str) -> None:
         }
         if r["decision"] in wanted and (needle in " ".join(map(str, line.values())).lower()):
             rows.append(line)
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.markdown(html_table(rows, nowrap=("Invoice", "Decision", "Total")), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------- review queue
@@ -305,7 +341,7 @@ def tab_review() -> None:
             cur = r["currency"] or "USD"
             st.markdown(
                 f'<div class="card hold"><div class="row"><b>{esc(r["vendor"] or "Unknown vendor")}'
-                f" · {esc(r['invoice_number'] or '—')}</b>"
+                f" · {esc(display_number(r['invoice_number']))}</b>"
                 f'<span class="big">{esc(money(r["total"], cur))}</span></div>'
                 f'<p class="why">{esc("; ".join(plain(f) for f in reasons))}</p>'
                 f'<p class="why"><b>Suggested:</b> {esc(suggestion({f["code"] for f in reasons}))}</p></div>',
@@ -362,19 +398,21 @@ def tab_evaluation(mode: str) -> None:
         f"{len(bad_pay)} invalid payments</div>",
         unsafe_allow_html=True,
     )
-    st.dataframe(
-        [
-            {
-                "File": r["file"],
-                "Expected": decision_badge(r["expected"]) if r["expected"] else "—",
-                "Actual": decision_badge(r["actual"]),
-                "Match": "✓ match" if r["match"] else "✗ differs",
-                "Why": r["reason"],
-            }
-            for r in ev["rows"]
-        ],
-        use_container_width=True,
-        hide_index=True,
+    st.markdown(
+        html_table(
+            [
+                {
+                    "File": r["file"],
+                    "Expected": decision_badge(r["expected"]) if r["expected"] else "—",
+                    "Actual": decision_badge(r["actual"]),
+                    "Match": "✓ match" if r["match"] else "✗ differs",
+                    "Why": r["reason"],
+                }
+                for r in ev["rows"]
+            ],
+            nowrap=("File", "Expected", "Actual", "Match"),
+        ),
+        unsafe_allow_html=True,
     )
 
 

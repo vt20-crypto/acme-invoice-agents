@@ -161,4 +161,20 @@ the next line's word ("Date") as the number; it now stays on the line.
   now comes from the environment or `.env` only. Leak tests run the UI against a local stub that
   echoes the credential and assert it appears in no database file, cache file, log, export or
   page text.
-- Scope of "0 invalid payments": see the README Results section.
+- Scope of "0 invalid payments": see #19 and the README Results section.
+
+## 19. Authorization consistency is not policy safety
+
+`0 invalid payments` in the eval means only that no document in the run was paid unless its final
+decision was APPROVE, over the 40 sample and synthetic documents, once per mode. It is an
+authorization-consistency check; it does not show that each blocking condition stops payment
+(a document that is wrongly APPROVEd and paid would also count as consistent). Policy safety is
+evidenced separately by `tests/test_blocking_conditions.py`: 27 conditions, each a minimal
+invoice run through the whole graph, asserting a non-APPROVE decision and no payment row, payer
+call or `mock_payment` output, independent of `expected.yaml`, in rules-only mode and with a
+model scripted to approve. The eval prints the invalid-payment count but does not use it for its
+exit code. Limits: tested inputs only, not a guarantee.
+
+Likewise, "recorded Grok responses" (captured live on 2026-10-17, replayed in cache mode by tests,
+CI and the eval) are distinct from fresh live execution. The only fresh live run since is one smoke
+test of `data/synthetic/invoice_9011.pdf` (5 model calls, APPROVE as expected).

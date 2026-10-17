@@ -87,7 +87,7 @@ human review queue; approving one still passes the same payment guard.
 | Grok, function calling, structured outputs, self-correction | Responses API, `search_inventory` tool, Pydantic schemas, retry loops |
 | Multi-agent orchestration | LangGraph |
 | `python main.py --invoice_path=...` with logs and results | `cli.py` |
-| Tests and error handling | `tests/` (205 tests, no network) |
+| Tests and error handling | `tests/` (246 tests, no network) |
 
 ## Results
 
@@ -140,21 +140,41 @@ are in `tests/regression/expected.yaml`, written before the run that checks them
 | invoice_9026.txt | APPROVE | APPROVE ✓ | All checks passed. Payment sent. |
 | invoice_9027.txt | APPROVE | APPROVE ✓ | Messy OCR-style text read correctly by the model. Payment sent. |
 
-**40/40 match** (`make eval`, cache mode)
+Two mode-specific matches over the same 40 documents (20 in `data/invoices`, 20 in
+`data/synthetic`), each scored against its own expectations in `tests/regression/expected.yaml`:
 
-Rules only (`--llm none`) is a separate run and is not combined with the above: 40/40 match its own
-expectations, which differ for the files that need a model (`none` entries in `expected.yaml`:
-unreadable text, unmapped item names and VP review over $10,000 hold instead).
+- Cache mode (`make eval`): **40/40** match the expected decisions, replaying recorded Grok responses.
+- Rules only (`main.py eval --llm none`): **40/40** match the rules-only expectations, in which the
+  cases that need a model (unreadable text, unmapped item names, VP review over $10,000) are
+  expected to HOLD. The two runs are not combined. Human-review (HOLD) counts: rules only 19,
+  with recorded Grok responses 12 (measured 2026-10-17).
 
-**What "0 invalid payments" covers.** `make eval` and `main.py eval` count a document as an
-invalid payment when its payment was sent but its final decision is not APPROVE. That is checked
-over the 40 documents in `data/invoices` (20) and `data/synthetic` (20), once per mode, in a
-throwaway database: cache mode (`make eval`) and rules-only mode (`main.py eval --llm none`) each
-print `0 invalid payments`. The regression test also checks that every APPROVE has exactly one
-payment and that no idempotency key is paid twice. It is a statement about that set and those
-two runs, not a guarantee beyond them; the guards that stop payments in general are
-`payments.py` (vendor, invoice number, positive amount, USD) and `review.py`, covered by
-`tests/test_release_gates.py`.
+**Authorization consistency.** `make eval` and `main.py eval` count a document as an invalid
+payment when it was paid but its final decision is not APPROVE, and print `0 invalid payments`
+for each of the two runs above, in a throwaway database. That is all the number asserts: no
+payment without an APPROVE decision, over those 40 documents. The count is printed, but it does
+not change the exit code (the exit code follows the 40/40 match). The idempotency-key check
+(no key paid twice) is made by the regression test and the database's UNIQUE key, not by the
+eval command.
+
+**Policy safety** is a different claim: that each blocking condition actually stops payment. It
+is evidenced by `tests/test_blocking_conditions.py`, which runs one minimal invoice per condition
+through the whole graph (27 conditions: required fields, arithmetic, unknown items, stock
+including per SKU, non-USD, due date, non-positive amounts, duplicate, revision, risk rules,
+VP reject/hold, critic, model outage, cache miss, unreadable text). Each case, without using
+`expected.yaml`, asserts the decision is not APPROVE and that there is no payment row, no payer
+call and no `mock_payment` output, in rules-only mode and again with a model scripted to
+approve everything (the code gate wins). A clean control invoice must be paid in the same
+harness. Manual-approval eligibility is covered by `tests/test_review.py` and
+`tests/test_release_gates.py`. This covers the conditions tested, not every possible input, and
+is not a guarantee.
+
+**Recorded versus fresh live.** "Recorded Grok responses" are live responses captured on
+2026-10-17 and replayed deterministically in cache mode; tests, CI and `make eval` use only
+those. "Fresh live execution" so far is one smoke test on 2026-10-17: `data/synthetic/invoice_9011.pdf`
+with `--llm live` into an empty cache directory (extraction, VP draft and revision, critic twice:
+5 model calls, all provenance `live`, decision APPROVE as expected). The other 39 documents were
+not re-run live.
 
 **What the model adds when rules-only also "matches".** The rules-only run is scored against its
 own expectations, in which every case that needs a model is expected to HOLD. Measured over the

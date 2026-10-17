@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:59:36+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 663,
+    "output_tokens": 563,
+    "reasoning_tokens": 412,
+    "cost_usd_estimate": 0.002236
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"Invoice has no prior duplicate ledger entry\", \"fact_ref\": \"check.duplicate\"},\n    {\"claim\": \"Arithmetic totals match exactly with no discrepancies\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"All line items resolved to valid inventory SKUs\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"Sufficient stock on hand for all items\", \"fact_ref\": \"stock.WidgetA\"},\n    {\"claim\": \"No blockers identified in automated checks\", \"fact_ref\": \"check.blockers\"},\n    {\"claim\": \"Risk level is low with no rules triggered\", \"fact_ref\": \"risk.level\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

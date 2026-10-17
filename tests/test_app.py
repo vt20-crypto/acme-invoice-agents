@@ -22,3 +22,12 @@ def test_app_renders_four_tabs_and_processes_a_sample_in_none_mode(tmp_path, mon
     assert not at.exception
     html_blocks = " ".join(m.value for m in at.markdown)
     assert "Approved" in html_blocks and "$5,000.00" in html_blocks
+
+
+def test_evaluation_tab_shows_summary_in_cache_mode(tmp_path, monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("ACME_UI_DB", str(tmp_path / "ui.db"))
+    at = AppTest.from_file(str(APP), default_timeout=90).run()
+    next(b for b in at.button if b.label == "Run evaluation (cache mode)").click().run()
+    assert not at.exception
+    assert any("22/22 match" in m.value for m in at.markdown)

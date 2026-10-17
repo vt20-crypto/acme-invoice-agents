@@ -1,7 +1,7 @@
 {
   "provenance": "recorded",
   "model": "grok-4.3",
-  "recorded_at": "2026-10-17T00:57:05+00:00",
+  "recorded_at": "2026-10-17T00:59:59+00:00",
   "settings": {
     "reasoning_effort": "low"
   },
@@ -15,15 +15,15 @@
   },
   "usage": {
     "input_tokens": 481,
-    "output_tokens": 183,
-    "reasoning_tokens": 172,
-    "cost_usd_estimate": 0.001059
+    "output_tokens": 173,
+    "reasoning_tokens": 162,
+    "cost_usd_estimate": 0.001034
   },
   "response": {
     "content": null,
     "tool_calls": [
       {
-        "id": "call-135fec79-fc5b-494a-9550-f787018f9d71-0",
+        "id": "call-4974cfe2-eee1-4458-8d43-cfc43919bb8c-0",
         "name": "search_inventory",
         "arguments": "{\"query\":\"WidgetC\"}"
       }

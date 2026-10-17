@@ -154,15 +154,9 @@ def metric(label: str, value: str) -> str:
 # ---------------------------------------------------------------------------- settings
 
 
-def session_key() -> str:
-    """The key typed in Settings. It lives in this browser session's state only: never in the
-    environment, on disk, in the database or in a log."""
-    return str(st.session_state.get("xai_api_key") or "").strip()
-
-
 def has_api_key() -> bool:
     load_dotenv()
-    return bool(session_key() or os.environ.get("LLM_API_KEY", "").strip())
+    return bool(os.environ.get("LLM_API_KEY", "").strip())
 
 
 def reset_database() -> None:
@@ -190,16 +184,7 @@ def settings_popover() -> str:
             label_visibility="collapsed",
         )
         if not key_ok:
-            st.caption("Live Grok is unavailable: add a key below or in .env (see .env.example).")
-        st.text_input(
-            "xAI API key (optional)",
-            type="password",
-            key="xai_api_key",
-            placeholder="xai-...",
-            help="Auto mode uses recorded responses first, then live Grok with this key, "
-            "then rules only.",
-        )
-        st.caption("Used for this browser session only; never saved.")
+            st.caption("Live Grok is unavailable: set LLM_API_KEY in .env (see .env.example).")
         st.divider()
         if not st.session_state.get("confirm_reset"):
             if st.button("Reset database", use_container_width=True):
@@ -218,7 +203,7 @@ def settings_popover() -> str:
 
 def client_for(mode: str):
     try:
-        return make_client(mode, CACHE_DIR, api_key=session_key() or None)
+        return make_client(mode, CACHE_DIR)
     except LLMUnavailable as exc:
         st.error(f"The AI engine is not available: {exc}")
         return None

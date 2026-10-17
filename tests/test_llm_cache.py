@@ -105,17 +105,3 @@ def test_cache_entries_never_contain_secrets_fields(tmp_path):
 
     src = inspect.getsource(LiveTransport.call)
     assert "api_key" not in src and "Authorization" not in src
-
-
-def test_api_key_argument_enables_live_for_this_client_only(monkeypatch):
-    # An explicit key (the UI's per-session key) turns on live calls in auto mode without
-    # touching the environment.
-    from invoice_agents.llm.client import AutoTransport, make_client
-
-    monkeypatch.setenv("LLM_API_KEY", "")
-    assert make_client("auto").transport.live is None
-    client = make_client("auto", api_key="test-key")
-    assert isinstance(client.transport, AutoTransport) and client.transport.live is not None
-    import os
-
-    assert os.environ["LLM_API_KEY"] == ""

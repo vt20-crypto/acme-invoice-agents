@@ -51,6 +51,7 @@ EXECUTION_CODES = frozenset(
         "llm_unavailable",
         "cache_missing",
         "extraction_failed",
+        "invoice_number_unreadable",
         "item_needs_mapping",
         "critic_unresolved",
         "vp_requires_llm",

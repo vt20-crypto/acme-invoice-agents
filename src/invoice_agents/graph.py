@@ -103,11 +103,15 @@ def build_graph(ctx: Context):
         ex = extract(doc, ctx.client)
         findings: list[Finding] = []
         if ex.uncertain:
+            unreadable = ex.failure_code == "invoice_number_unreadable"
             findings.append(
                 Finding(
                     code=ex.failure_code or "extraction_failed",
                     severity="hold",
-                    message="System issue: the document could not be extracted reliably "
+                    message="System issue: an invoice number appears in the document but could "
+                    "not be read; a person must check it and confirm the number."
+                    if unreadable
+                    else "System issue: the document could not be extracted reliably "
                     "(this is not a vendor defect).",
                     evidence="; ".join(ex.reasons),
                     stage="extraction",
@@ -279,8 +283,8 @@ def build_graph(ctx: Context):
 
     def pay(state: PipelineState) -> dict[str, Any]:
         inv = state["invoice"]
-        assert inv is not None and inv.vendor and inv.total is not None
-        key = f"{vendor_key(inv)}|{number_key(inv)}"
+        assert inv is not None
+        key = f"{vendor_key(inv) or ''}|{number_key(inv) or ''}"
         res = pay_invoice(
             db,
             vendor=inv.vendor,

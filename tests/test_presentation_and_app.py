@@ -57,7 +57,7 @@ def test_app_renders_with_streamlit_apptest(tmp_path, monkeypatch):
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     at = AppTest.from_file(str(APP), default_timeout=30).run()
     assert not at.exception
-    assert [t.label for t in at.tabs] == ["Process", "Batch", "Ledger & review queue"]
+    assert [t.label for t in at.tabs][:3] == ["Process", "Batch", "Ledger & review queue"]
     # every input has a label
     assert all(w.label for w in at.sidebar.selectbox) and all(w.label for w in at.text_input)
 
@@ -118,3 +118,55 @@ def test_ui_disables_approve_for_ineligible_hold_and_shows_reason(tmp_path, monk
     by_disabled = sorted(b.disabled for b in approve)
     assert by_disabled == [False, True]  # EUR invoice disabled, USD stock hold enabled
     assert any("no FX" in w.value for w in at.warning)
+
+
+def _fresh_app(tmp_path, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    at = AppTest.from_file(str(APP), default_timeout=90).run()
+    at.sidebar.text_input[0].set_value(str(tmp_path / "ui.db")).run()
+    return at
+
+
+def test_absolute_paths_appear_only_in_collapsed_developer_details(tmp_path, monkeypatch):
+    at = _fresh_app(tmp_path, monkeypatch)
+    next(b for b in at.button if b.label == "Run").click().run()
+    assert not at.exception
+    root = str(APP.parent.parent)
+    inside = [m for e in at.expander if e.label.startswith("Developer details") for m in e.markdown]
+    assert any("Absolute path" in m.value for m in inside)
+    outside_hits = [
+        m.value for m in at.markdown if root in m.value and all(m.value != i.value for i in inside)
+    ]
+    assert not outside_hits, outside_hits
+    assert any("1001" in m.value or "$5,000.00" in m.value for m in at.markdown)
+
+
+def test_process_tab_shows_resolved_sku_table_and_plain_findings(tmp_path, monkeypatch):
+    at = _fresh_app(tmp_path, monkeypatch)
+    # pick invoice_1005 (stock hold) from the sample list
+    sel = next(s for s in at.selectbox if s.label == "Sample invoice")
+    sel.select(next(o for o in sel.options if o.endswith("invoice_1005.json"))).run()
+    sidebar_mode = next(s for s in at.sidebar.selectbox if s.label == "LLM mode")
+    sidebar_mode.select("none").run()
+    next(b for b in at.button if b.label == "Run").click().run()
+    assert not at.exception
+    assert any("Ordered 8 GadgetX, only 5 in stock" in m.value for m in at.markdown)
+    assert any("Resolved SKU" in df.value.columns for df in at.dataframe)
+
+
+def test_evaluation_tab_runs_one_mode_and_live_shows_not_run(tmp_path, monkeypatch):
+    at = _fresh_app(tmp_path, monkeypatch)
+    radio = next(r for r in at.radio if r.label == "Execution mode to evaluate")
+    radio.set_value("live").run()
+    assert any("not run" in i.value and "no API key" in i.value for i in at.info)
+    radio = next(r for r in at.radio if r.label == "Execution mode to evaluate")
+    radio.set_value("none").run()
+    next(b for b in at.button if b.label == "Run evaluation (none mode)").click().run()
+    assert not at.exception
+    df = next(d for d in at.dataframe if "§4 baseline" in d.value.columns)
+    assert len(df.value) == 22
+    text = " ".join(m.value for m in at.markdown)
+    assert "match 15" in text and "expected exception 6" in text and "no baseline 1" in text
+    assert "(total 22)" in text and "Developer / evaluation view" in text

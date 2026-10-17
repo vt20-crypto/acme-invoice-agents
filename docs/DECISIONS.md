@@ -173,8 +173,9 @@ evidenced separately by `tests/test_blocking_conditions.py`: 27 conditions, each
 invoice run through the whole graph, asserting a non-APPROVE decision and no payment row, payer
 call or `mock_payment` output, independent of `expected.yaml`, in rules-only mode and with a
 model scripted to approve. The eval prints the invalid-payment count but does not use it for its
-exit code. Limits: tested inputs only, not a guarantee.
+exit code: `run_eval` (`src/invoice_agents/cli.py`) exits non-zero only on a decision mismatch, so payment safety is enforced by `tests/test_blocking_conditions.py` and the regression tests, not by the eval exit status. Limits: tested inputs only, not a guarantee.
 
 Likewise, "recorded Grok responses" (captured live on 2026-10-17, replayed in cache mode by tests,
 CI and the eval) are distinct from fresh live execution. The only fresh live run since is one smoke
 test of `data/synthetic/invoice_9011.pdf` (5 model calls, APPROVE as expected).
+There is no 3-call application limit: the "3" was only the smoke-test budget, exceeded because one full approval path makes 5 calls. The per-invoice bound comes from the pipeline structure (max 3 extraction, 6 resolution turns, 2 VP drafts, 2 critic calls = 13; max 1 revision), not from a counter.

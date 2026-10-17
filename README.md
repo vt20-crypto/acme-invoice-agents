@@ -153,7 +153,10 @@ Two mode-specific matches over the same 40 documents (20 in `data/invoices`, 20 
 payment when it was paid but its final decision is not APPROVE, and print `0 invalid payments`
 for each of the two runs above, in a throwaway database. That is all the number asserts: no
 payment without an APPROVE decision, over those 40 documents. The count is printed, but it does
-not change the exit code (the exit code follows the 40/40 match). The idempotency-key check
+not change the exit code: `run_eval` in `src/invoice_agents/cli.py` exits non-zero only when a
+decision differs from the expected one. Payment-safety failures are caught in CI by
+`tests/test_blocking_conditions.py` and the regression tests, which fail on any payment for a
+non-APPROVE decision. The idempotency-key check
 (no key paid twice) is made by the regression test and the database's UNIQUE key, not by the
 eval command.
 
@@ -175,6 +178,19 @@ those. "Fresh live execution" so far is one smoke test on 2026-10-17: `data/synt
 with `--llm live` into an empty cache directory (extraction, VP draft and revision, critic twice:
 5 model calls, all provenance `live`, decision APPROVE as expected). The other 39 documents were
 not re-run live.
+
+**Model calls per invoice.** There is no application-level call limit and no counter: the bound
+comes from the pipeline structure. Per invoice, at most 3 extraction calls (1 plus
+`MAX_EXTRACT_RETRIES = 2`, `config.py:5`, loop at `ingestion/extractor.py:339`; text and PDF
+only), at most 6 item-resolution turns (one tool-calling round per invoice for the lines code
+could not resolve, `resolve.py:77`, capped by `MAX_TOOL_ITERATIONS = 6`, `config.py:7`,
+`llm/client.py:375`), and in approval at most 2 VP drafts (the draft plus `MAX_VP_REVISIONS = 1`,
+`config.py:6`, `approval.py:133`) and, for totals over $10,000, at most 2 critic calls
+(`approval.py:145`). That is at most 13 model calls (11 without the critic), not counting the
+OpenAI SDK's own default HTTP retries, which the repository does not configure. A full approval
+path of an over-$10,000 PDF is 5 calls: extraction, VP draft, critic, VP revision, critic (the
+`invoice_9011.pdf` smoke test). The "3" was only the release smoke-test budget, which that single
+test exceeded because one full approval path makes 5 calls; it is not a limit in the application.
 
 **What the model adds when rules-only also "matches".** The rules-only run is scored against its
 own expectations, in which every case that needs a model is expected to HOLD. Measured over the

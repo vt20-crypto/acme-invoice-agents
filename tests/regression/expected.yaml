@@ -19,7 +19,7 @@
 - {file: data/invoices/invoice_1011.pdf, decision: APPROVE, why: "clean, $3,000"}
 - {file: data/invoices/invoice_1011.txt, decision: DUPLICATE, why: "same invoice as the PDF"}
 - {file: data/invoices/invoice_1012.pdf, decision: HOLD, why: "vendor identity change (formerly) plus near threshold"}
-- {file: data/invoices/invoice_1012.txt, decision: DUPLICATE, why: "same invoice as the PDF"}
+- {file: data/invoices/invoice_1012.txt, decision: DUPLICATE, none: HOLD, why: "same invoice as the PDF; rules only cannot read the OCR-style PDF, so there is no original to match (extraction_failed)"}
 - {file: data/invoices/invoice_1013.json, decision: REJECT, why: "arithmetic: 21,040 + 1,472.80 tax = 22,512.80 but states 22,562.80"}
 - {file: data/invoices/invoice_1013.pdf, decision: DUPLICATE, why: "same invoice as the JSON"}
 - {file: data/invoices/invoice_1014.xml, decision: HOLD, why: "EUR: payment rail is USD-only"}

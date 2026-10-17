@@ -18,15 +18,15 @@ SAMPLES = collect_files([ROOT / "data" / "invoices", ROOT / "data" / "synthetic"
 def test_loading_samples_twice_skips_files_already_in_the_ledger(db):
     client = make_client("cache", ROOT / "cache" / "llm")
     first, skipped = run_new(SAMPLES, db, client, "cache")
-    assert len(first) == 22 and skipped == 0
+    assert len(first) == len(SAMPLES) == 40 and skipped == 0
     decisions = [s["decision"].value for s, _ in first]
     # different files that are the same business invoice are still recorded as duplicates
-    assert decisions.count("DUPLICATE") == 3
+    assert decisions.count("DUPLICATE") == 4
     ledger_rows, payments = len(db.ledger()), len(db.payments())
-    assert ledger_rows == 22
+    assert ledger_rows == 40
 
     second, skipped = run_new(SAMPLES, db, client, "cache")
-    assert len(second) == 0 and skipped == 22
+    assert len(second) == 0 and skipped == 40
     assert len(db.ledger()) == ledger_rows and len(db.payments()) == payments
 
 

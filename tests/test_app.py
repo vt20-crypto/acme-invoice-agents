@@ -42,7 +42,7 @@ def test_dashboard_is_empty_until_samples_are_loaded_from_the_ledger(tmp_path, m
     assert any("The ledger is empty" in m.value for m in at.markdown)
     click(at, "Load sample invoices")
     blocks = " ".join(m.value for m in at.markdown)
-    assert '<p class="v">22</p>' in blocks  # processed
+    assert '<p class="v">40</p>' in blocks  # processed
     assert "INV-1002" in blocks and "Already processed earlier as INV-1011" in blocks
 
 
@@ -51,9 +51,9 @@ def test_review_queue_empty_state_then_cards_after_samples(tmp_path, monkeypatch
     assert any("Nothing waiting for review" in m.value for m in at.markdown)
     click(at, "Load sample invoices")
     labels = [b.label for b in at.button]
-    assert labels.count("Approve and pay") == 6 and labels.count("Reject") == 6
+    assert labels.count("Approve and pay") == 12 and labels.count("Reject") == 12
     disabled = [b for b in at.button if b.label == "Approve and pay" and b.disabled]
-    assert len(disabled) == 1  # INV-1014 is EUR: the payment rail is USD-only
+    assert len(disabled) == 2  # INV-1014 and EU-4410 are EUR: the payment rail is USD-only
     assert any("Approve is unavailable" in c.value for c in at.caption)
 
 

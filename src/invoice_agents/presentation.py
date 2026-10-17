@@ -176,6 +176,7 @@ _RISK_TEXT = {
 }
 _STATIC = {
     "missing_vendor": "The vendor name is missing",
+    "missing_invoice_number": "The invoice number is missing",
     "missing_total": "The invoice total is missing",
     "missing_items": "The invoice has no line items",
     "missing_due_date": "The due date is missing or could not be read",

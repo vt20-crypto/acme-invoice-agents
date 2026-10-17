@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:27+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "critic",
+    "messages": 2,
+    "schema": "Critique",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 780,
+    "output_tokens": 893,
+    "reasoning_tokens": 848,
+    "cost_usd_estimate": 0.003207
+  },
+  "response": {
+    "content": "{\"verdict\": \"revise\", \"issues\": [\"claim 'All stock levels are sufficient' cites stock.GadgetX whose text does not support 'all' (other stock.* facts exist but are uncited)\"]}",
+    "tool_calls": []
+  }
+}

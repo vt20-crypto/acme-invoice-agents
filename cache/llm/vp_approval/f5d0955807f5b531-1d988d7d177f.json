@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:55+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 678,
+    "output_tokens": 596,
+    "reasoning_tokens": 497,
+    "cost_usd_estimate": 0.002338
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"No duplicate invoice exists in ledger\", \"fact_ref\": \"check.duplicate\"},\n    {\"claim\": \"Arithmetic reconciliation confirmed\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"All line items match inventory SKUs with sufficient stock\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"No blockers present\", \"fact_ref\": \"check.blockers\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

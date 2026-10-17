@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:47+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 869,
+    "output_tokens": 107,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001354
+  },
+  "response": {
+    "content": "{\"vendor\":\"Redwood Parts Group\",\"invoice_number\":\"RP-5503\",\"invoice_date\":\"2026-02-17\",\"due_date\":\"2026-03-19\",\"currency\":\"USD\",\"line_items\":[{\"raw_name\":\"WidgetB\",\"quantity\":3,\"sku\":null,\"unit_price\":500.0,\"line_total\":null}],\"charges\":[],\"subtotal\":1500.0,\"tax\":0.0,\"total\":1500.0,\"notes\":[\"URGENT - pay today or service will be suspended.\"]}",
+    "tool_calls": []
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:45+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 873,
+    "output_tokens": 197,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001584
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Northwind Supply Co.\",\n  \"invoice_number\": \"NW-2301\",\n  \"invoice_date\": \"2026-02-10\",\n  \"due_date\": \"2026-03-12\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"WidgetA\",\n      \"quantity\": 6,\n      \"sku\": null,\n      \"unit_price\": 250.0,\n      \"line_total\": null\n    },\n    {\n      \"raw_name\": \"WidgetB\",\n      \"quantity\": 2,\n      \"sku\": null,\n      \"unit_price\": 500.0,\n      \"line_total\": null\n    }\n  ],\n  \"charges\": [],\n  \"subtotal\": 2500.0,\n  \"tax\": 200.0,\n  \"total\": 2700.0,\n  \"notes\": [\"Payment Terms: Net 30\"]\n}",
+    "tool_calls": []
+  }
+}

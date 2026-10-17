@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T08:00:36+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 663,
+    "output_tokens": 459,
+    "reasoning_tokens": 336,
+    "cost_usd_estimate": 0.001976
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"arithmetic is valid and matches total\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"no blockers present\", \"fact_ref\": \"check.blockers\"},\n    {\"claim\": \"risk level is low\", \"fact_ref\": \"risk.level\"},\n    {\"claim\": \"all items resolved to inventory SKUs with sufficient stock\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"stock is adequate for both line items\", \"fact_ref\": \"stock.GadgetX\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

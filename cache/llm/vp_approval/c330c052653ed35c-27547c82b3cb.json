@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T08:00:16+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 2,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 663,
+    "output_tokens": 680,
+    "reasoning_tokens": 534,
+    "cost_usd_estimate": 0.002529
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"Invoice total under VP review threshold so standard approval applies\", \"fact_ref\": \"invoice.total\"},\n    {\"claim\": \"No prior ledger entry for this invoice\", \"fact_ref\": \"check.duplicate\"},\n    {\"claim\": \"Arithmetic totals match exactly\", \"fact_ref\": \"validation.arithmetic\"},\n    {\"claim\": \"All line items resolved to inventory SKUs\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"Sufficient stock on hand for required items\", \"fact_ref\": \"stock.WidgetA\"},\n    {\"claim\": \"No blockers present\", \"fact_ref\": \"check.blockers\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

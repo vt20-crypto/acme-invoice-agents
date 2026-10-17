@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T08:00:28+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 901,
+    "output_tokens": 238,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001721
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Greenfield Distribution\",\n  \"invoice_number\": \"GR-8845\",\n  \"invoice_date\": \"2026-02-24\",\n  \"due_date\": \"2026-03-26\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"WidgetA\",\n      \"quantity\": 4,\n      \"sku\": null,\n      \"unit_price\": 250.00,\n      \"line_total\": 1000.00\n    },\n    {\n      \"raw_name\": \"GadgetX\",\n      \"quantity\": 2,\n      \"sku\": null,\n      \"unit_price\": 750.00,\n      \"line_total\": 1500.00\n    }\n  ],\n  \"charges\": [\n    {\n      \"kind\": \"shipping\",\n      \"description\": \"Shipping\",\n      \"amount\": 75.00\n    }\n  ],\n  \"subtotal\": 2500.00,\n  \"tax\": 200.00,\n  \"total\": 2775.00,\n  \"notes\": [\n    \"Payment Terms: Net 30\"\n  ]\n}",
+    "tool_calls": []
+  }
+}

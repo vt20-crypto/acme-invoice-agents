@@ -1,0 +1,26 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T08:00:24+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "resolve_items",
+    "messages": 5,
+    "schema": "ResolutionResult",
+    "tools": [
+      "search_inventory"
+    ]
+  },
+  "usage": {
+    "input_tokens": 535,
+    "output_tokens": 156,
+    "reasoning_tokens": 112,
+    "cost_usd_estimate": 0.001059
+  },
+  "response": {
+    "content": "{\n  \"items\": [\n    {\"raw_name\": \"Titanium Flange Kit\", \"sku\": null},\n    {\"raw_name\": \"Hydraulic Pump 3000\", \"sku\": null}\n  ]\n}",
+    "tool_calls": []
+  }
+}

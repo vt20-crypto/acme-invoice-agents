@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T07:59:42+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "critic",
+    "messages": 2,
+    "schema": "Critique",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 840,
+    "output_tokens": 456,
+    "reasoning_tokens": 447,
+    "cost_usd_estimate": 0.00219
+  },
+  "response": {
+    "content": "{\"verdict\":\"pass\",\"issues\":[]}",
+    "tool_calls": []
+  }
+}

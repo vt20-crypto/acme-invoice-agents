@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:57:26+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "critic",
+    "messages": 2,
+    "schema": "Critique",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 648,
+    "output_tokens": 892,
+    "reasoning_tokens": 769,
+    "cost_usd_estimate": 0.00304
+  },
+  "response": {
+    "content": "{\"verdict\": \"revise\", \"issues\": [\"Reason 1 cites check.blockers (exists) but claim also asserts low risk + threshold handling not supported by that ref (use risk.level + invoice.total)\", \"Reason 2 cites validation.arithmetic but adds 'line items resolved to SKUs' unsupported by it (use validation.items)\", \"Reason 3 cites only stock.GadgetX (exists, partial support) but claim covers all stock + duplicate (need stock.WidgetA, stock.WidgetB, check.duplicate)\", \"Draft approves >$10k invoice without citing fact supporting strict standard compliance\"]}",
+    "tool_calls": []
+  }
+}

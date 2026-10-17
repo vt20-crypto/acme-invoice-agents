@@ -197,7 +197,19 @@ def build_graph(ctx: Context):
         if not res.duplicate_of:
             risk = assess(inv, state["doc"].raw_text)
             res.findings.extend(risk.findings)
-            res.facts["risk.level"] = risk.level
+            res.facts["risk.level"] = (
+                f"{risk.level} ("
+                + (
+                    ", ".join(s.name for s in risk.signals)
+                    if risk.signals
+                    else "no risk rules triggered"
+                )
+                + ")"
+            )
+            res.facts["policy.vp_threshold"] = (
+                "totals over 10,000 get the strict standard: no blockers, low risk, reconciled "
+                "arithmetic and enough stock"
+            )
             blockers = [x.code for x in res.findings if x.severity in ("reject", "hold")]
             res.facts["check.blockers"] = ", ".join(blockers) if blockers else "none"
         lines = [f"[{f.severity}] {finding_line(f)}" for f in res.findings] or ["no findings"]

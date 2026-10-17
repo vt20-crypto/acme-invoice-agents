@@ -281,7 +281,10 @@ EXTRACTION_SYSTEM = (
     "You extract structured data from one vendor invoice. Copy vendor, invoice number, item "
     "names and every number exactly as written in the document. Do not compute, infer or "
     "correct values: if a field is not stated, use null. Discounts are negative charges; "
-    "shipping and fees go in charges, not line_items. Reply with JSON matching the schema."
+    "shipping and fees go in charges, not line_items. Labels may be abbreviated or misspelled "
+    "(for example Vndr, Itms, Dt, Amt): map each to the field it clearly stands for, and read a "
+    "single stated amount for the whole invoice (Amt, Amount, Total) as the total. Quantities may "
+    "be written like 'x12' or 'qty 20'. Reply with JSON matching the schema."
 )
 
 

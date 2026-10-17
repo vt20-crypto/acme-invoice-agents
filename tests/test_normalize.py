@@ -45,3 +45,9 @@ def test_check_grounding_flags_invented_numbers():
     assert check_grounding(good, src) == []
     bad = good.model_copy(update={"total": 2600.0})
     assert any("total" in p for p in check_grounding(bad, src))
+
+
+def test_digits_glued_to_letters_count_as_numbers():
+    nums = numbers_in_text("- SuperGizmo       x12     $400.00 each\n  qty5 and x6")
+    assert {12.0, 5.0, 6.0, 400.0} <= nums
+    assert 1.0 not in numbers_in_text("Invoice Illinois")

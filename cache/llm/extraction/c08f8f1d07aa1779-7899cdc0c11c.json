@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:56:14+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 765,
+    "output_tokens": 127,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001274
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Gadgets Co.\",\n  \"invoice_number\": \"1002\",\n  \"invoice_date\": null,\n  \"due_date\": \"2026-01-30\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"GadgetX\",\n      \"quantity\": 20,\n      \"sku\": null,\n      \"unit_price\": 750,\n      \"line_total\": null\n    }\n  ],\n  \"charges\": [],\n  \"subtotal\": null,\n  \"tax\": null,\n  \"total\": null,\n  \"notes\": []\n}",
+    "tool_calls": []
+  }
+}

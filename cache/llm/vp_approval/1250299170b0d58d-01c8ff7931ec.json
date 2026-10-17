@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:57:40+00:00",
+  "settings": {
+    "reasoning_effort": "low"
+  },
+  "request": {
+    "agent": "vp_approval",
+    "messages": 4,
+    "schema": "VPDraft",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 844,
+    "output_tokens": 1273,
+    "reasoning_tokens": 1112,
+    "cost_usd_estimate": 0.004237
+  },
+  "response": {
+    "content": "{\n  \"decision\": \"APPROVE\",\n  \"reasons\": [\n    {\"claim\": \"Low risk level justifies approval under stricter standards for totals over 10000\", \"fact_ref\": \"risk.level\"},\n    {\"claim\": \"Invoice total of 10750 exceeds 10000 threshold\", \"fact_ref\": \"invoice.total\"},\n    {\"claim\": \"All 3 line items resolved to inventory SKUs\", \"fact_ref\": \"validation.items\"},\n    {\"claim\": \"Sufficient stock on hand for WidgetA\", \"fact_ref\": \"stock.WidgetA\"},\n    {\"claim\": \"Sufficient stock on hand for WidgetB\", \"fact_ref\": \"stock.WidgetB\"},\n    {\"claim\": \"No prior ledger entry exists\", \"fact_ref\": \"check.duplicate\"}\n  ]\n}",
+    "tool_calls": []
+  }
+}

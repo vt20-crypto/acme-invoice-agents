@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:56:54+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 910,
+    "output_tokens": 169,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.00156
+  },
+  "response": {
+    "content": "{\"vendor\":\"QuickShip Distributers\",\"invoice_number\":\"INV 1012\",\"invoice_date\":\"2026-01-26\",\"due_date\":\"2026-02-25\",\"currency\":\"USD\",\"line_items\":[{\"raw_name\":\"Widget A\",\"quantity\":12,\"sku\":null,\"unit_price\":250,\"line_total\":3000},{\"raw_name\":\"WidgetB\",\"quantity\":7,\"sku\":null,\"unit_price\":500,\"line_total\":3500},{\"raw_name\":\"Gadget X\",\"quantity\":4,\"sku\":null,\"unit_price\":750,\"line_total\":3000}],\"charges\":[],\"subtotal\":9500,\"tax\":475,\"total\":9975,\"notes\":[\"Ref PO-20260115. Deliver to warehouse dock B. Contact Jim at ext 4421 with questions.\",\"Terms: Net 30\"]}",
+    "tool_calls": []
+  }
+}

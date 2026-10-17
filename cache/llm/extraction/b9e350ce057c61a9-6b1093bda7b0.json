@@ -1,0 +1,24 @@
+{
+  "provenance": "recorded",
+  "model": "grok-4.3",
+  "recorded_at": "2026-10-17T00:57:53+00:00",
+  "settings": {
+    "reasoning_effort": "none"
+  },
+  "request": {
+    "agent": "extraction",
+    "messages": 2,
+    "schema": "Invoice",
+    "tools": []
+  },
+  "usage": {
+    "input_tokens": 821,
+    "output_tokens": 198,
+    "reasoning_tokens": 0,
+    "cost_usd_estimate": 0.001521
+  },
+  "response": {
+    "content": "{\n  \"vendor\": \"Orbit Fasteners LLC\",\n  \"invoice_number\": \"OF-4471\",\n  \"invoice_date\": \"2026-02-03\",\n  \"due_date\": \"2026-03-05\",\n  \"currency\": \"USD\",\n  \"line_items\": [\n    {\n      \"raw_name\": \"WidgetA\",\n      \"quantity\": 4,\n      \"sku\": null,\n      \"unit_price\": 250.0,\n      \"line_total\": null\n    },\n    {\n      \"raw_name\": \"GadgetX\",\n      \"quantity\": 2,\n      \"sku\": null,\n      \"unit_price\": 750.0,\n      \"line_total\": null\n    }\n  ],\n  \"charges\": [],\n  \"subtotal\": 2500.0,\n  \"tax\": 0.0,\n  \"total\": 2500.0,\n  \"notes\": [\"Payment Terms: Net 30\"]\n}",
+    "tool_calls": []
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "provenance": "recorded",
+  "note": "Cost accounting only (not a response): API smoke test (5 calls) plus the first live batch run (25 calls) whose cache entries were discarded after prompt changes.",
+  "usage": {
+    "input_tokens": 21973,
+    "output_tokens": 12284,
+    "cost_usd_estimate": 0.0582
+  }
+}

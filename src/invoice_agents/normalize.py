@@ -51,9 +51,17 @@ def parse_number(s: str) -> float | None:
 _TOKEN = re.compile(r"(?<![A-Za-z0-9])[$€£]?[0-9OoIl][0-9OoIl,]*(?:\.[0-9OoIl]+)?(?![A-Za-z])")
 
 
+_ATTACHED = re.compile(r"(?<![0-9.,])(\d[\d,]*(?:\.\d+)?)(?![A-Za-z0-9])")
+
+
 def numbers_in_text(text: str) -> set[float]:
-    """Every numeric token in the source, rounded to 2 decimals, OCR-repaired."""
+    """Every numeric token in the source, rounded to 2 decimals, OCR-repaired. Digits glued to a
+    letter ('x12', 'qty5') count too."""
     out: set[float] = set()
+    for m in _ATTACHED.finditer(text):
+        v = parse_number(m.group(1))
+        if v is not None:
+            out.add(round(v, 2))
     for m in _TOKEN.finditer(text):
         tok = m.group(0)
         if not any(c.isdigit() for c in tok):

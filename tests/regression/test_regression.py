@@ -1,4 +1,4 @@
-"""The regression test: all 22 documents in cache mode (recorded Grok responses, no key needed)
+"""The regression test: every sample and synthetic document in cache mode (recorded Grok responses, no key needed)
 against tests/regression/expected.yaml. It fails, never skips, if a cached response is missing."""
 
 import pytest
@@ -19,7 +19,7 @@ def test_decision_matches_expected(entry, run):
 
 
 def test_all_documents_ran_and_none_is_a_system_hold(run):
-    assert run["total"] == len(load_expected()) == 22
+    assert run["total"] == len(load_expected())
     assert not [r["file"] for r in run["rows"] if r["cause"] in ("system", "both")]
 
 

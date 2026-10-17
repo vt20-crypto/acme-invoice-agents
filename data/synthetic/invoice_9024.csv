@@ -1,0 +1,13 @@
+field,value
+invoice_number,CM-9024
+vendor,Pinnacle Equipment Co.
+date,2026-02-21
+due_date,2026-03-23
+item,WidgetA
+quantity,-2
+unit_price,250.00
+subtotal,-500.00
+tax,0.00
+total,-500.00
+currency,USD
+payment_terms,Credit memo

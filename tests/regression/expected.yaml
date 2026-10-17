@@ -1,7 +1,10 @@
-# Documented baseline decisions for all 22 documents, in batch order
-# (data/invoices sorted by file name, then data/synthetic).
+# Documented baseline decisions for all documents, in batch order
+# (data/invoices sorted by file name, then data/synthetic sorted by file name).
 # Written BEFORE the first live run. Do not edit an entry to make a run pass: a mismatch is a
 # finding to explain (see docs/DECISIONS.md).
+# `decision` is the expected result with a model (cache or live). `none` is optional and gives
+# the expected result of the rules-only run (--llm none) where it differs: anything that needs a
+# model (unreadable text, unmapped item names, VP review over $10,000) holds instead.
 - {file: data/invoices/invoice_1001.txt, decision: APPROVE, why: "clean, $5,000"}
 - {file: data/invoices/invoice_1002.txt, decision: HOLD, why: "GadgetX 20 > stock 5"}
 - {file: data/invoices/invoice_1003.txt, decision: REJECT, why: "two medium risk rules (pressure language, invalid due date) plus stock"}
@@ -10,7 +13,7 @@
 - {file: data/invoices/invoice_1005.json, decision: HOLD, why: "GadgetX 8 > stock 5"}
 - {file: data/invoices/invoice_1006.csv, decision: APPROVE, why: "clean, $2,750"}
 - {file: data/invoices/invoice_1007.csv, decision: REJECT, why: "arithmetic: 14,750 + 885 tax = 15,635 but states 15,525"}
-- {file: data/invoices/invoice_1008.txt, decision: REJECT, why: "all items unknown after the LLM inventory search"}
+- {file: data/invoices/invoice_1008.txt, decision: REJECT, none: HOLD, why: "all items unknown after the LLM inventory search; rules only cannot search, so item_needs_mapping"}
 - {file: data/invoices/invoice_1009.json, decision: REJECT, why: "negative quantity, blank vendor, totals do not add up"}
 - {file: data/invoices/invoice_1010.txt, decision: APPROVE, why: "reconciles with the $150 shipping charge"}
 - {file: data/invoices/invoice_1011.pdf, decision: APPROVE, why: "clean, $3,000"}
@@ -22,5 +25,23 @@
 - {file: data/invoices/invoice_1014.xml, decision: HOLD, why: "EUR: payment rail is USD-only"}
 - {file: data/invoices/invoice_1015.csv, decision: APPROVE, why: "clean, $6,500"}
 - {file: data/invoices/invoice_1016.json, decision: HOLD, why: "WidgetC is not in inventory"}
-- {file: data/synthetic/invoice_9001.json, decision: APPROVE, why: "over $10,000, VP and critic approve"}
+- {file: data/synthetic/invoice_9001.json, decision: APPROVE, none: HOLD, why: "over $10,000, VP and critic approve; rules only cannot run the VP review (vp_requires_llm)"}
 - {file: data/synthetic/invoice_9002.txt, decision: REJECT, why: "prompt injection (high risk)"}
+- {file: data/synthetic/invoice_9010.json, decision: APPROVE, why: "clean JSON, $2,700 = 2,500 + 200 tax, under the $10,000 VP threshold"}
+- {file: data/synthetic/invoice_9011.pdf, decision: APPROVE, none: HOLD, why: "PDF over $10,000 ($11,550 = 11,000 + 550 tax, stock fits): VP and critic approve; rules only cannot run the VP review"}
+- {file: data/synthetic/invoice_9012.txt, decision: REJECT, why: "arithmetic: lines 4,000 + 0 tax = 4,000 but states 4,300"}
+- {file: data/synthetic/invoice_9013.csv, decision: HOLD, why: "stock: GadgetX 7 > stock 5 (stock_exceeded is a hold)"}
+- {file: data/synthetic/invoice_9014.xml, decision: HOLD, why: "EUR: payment rail is USD-only, no FX"}
+- {file: data/synthetic/invoice_9015.json, decision: REJECT, why: "invoice number missing: no idempotency key can be formed and a reviewer may not approve it either (DECISIONS #11)"}
+- {file: data/synthetic/invoice_9016.csv, decision: HOLD, why: "due date 2026-03-01 is before invoice date 2026-03-10: invalid due date (one medium risk rule)"}
+- {file: data/synthetic/invoice_9017.txt, decision: DUPLICATE, why: "same vendor, number and content as invoice_9010.json in another format"}
+- {file: data/synthetic/invoice_9018_revised.json, decision: HOLD, why: "revision of invoice_9010 (NW-2301): total 2,700 -> 3,240; the original was paid"}
+- {file: data/synthetic/invoice_9019.json, decision: REJECT, why: "prompt injection hidden in notes (high risk)"}
+- {file: data/synthetic/invoice_9020.txt, decision: HOLD, why: "pressure language alone is one medium risk rule"}
+- {file: data/synthetic/invoice_9021.xml, decision: APPROVE, why: "clean, $9,975 is in the 9,000-9,999.99 band: low risk note only"}
+- {file: data/synthetic/invoice_9022.json, decision: APPROVE, none: HOLD, why: "abbreviated item names map to WidgetA and WidgetB via inventory search; rules only cannot search (item_needs_mapping)"}
+- {file: data/synthetic/invoice_9023.csv, decision: REJECT, none: HOLD, why: "no item exists in inventory after the search; rules only cannot search (item_needs_mapping)"}
+- {file: data/synthetic/invoice_9024.csv, decision: REJECT, why: "credit memo with a negative quantity: quantity must be positive, like invoice_1009"}
+- {file: data/synthetic/invoice_9025.txt, decision: HOLD, why: "WidgetB is on two lines (6 + 6 = 12) but only 10 are in stock: stock is aggregated per SKU"}
+- {file: data/synthetic/invoice_9026.txt, decision: APPROVE, why: "reconciles: 2,500 lines + 200 tax + 75 shipping = 2,775"}
+- {file: data/synthetic/invoice_9027.txt, decision: APPROVE, none: HOLD, why: "messy OCR text (Vndr, Inv#, Qty, Amt) reads correctly with a model; rules only cannot read it (extraction_failed)"}

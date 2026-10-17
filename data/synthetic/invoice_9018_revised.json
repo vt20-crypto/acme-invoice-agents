@@ -1,0 +1,19 @@
+{
+  "invoice_number": "NW-2301",
+  "vendor": {
+    "name": "Northwind Supply Co.",
+    "address": "410 Harbor Street, Portland, OR 97204"
+  },
+  "date": "2026-02-10",
+  "due_date": "2026-03-12",
+  "line_items": [
+    {"item": "WidgetA", "quantity": 8, "unit_price": 250.00},
+    {"item": "WidgetB", "quantity": 2, "unit_price": 500.00}
+  ],
+  "subtotal": 3000.00,
+  "tax_rate": 0.08,
+  "tax_amount": 240.00,
+  "total": 3240.00,
+  "currency": "USD",
+  "payment_terms": "Net 30"
+}

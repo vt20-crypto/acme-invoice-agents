@@ -1,0 +1,16 @@
+INVOICE
+
+Vendor: Redwood Parts Group
+Invoice Number: RP-5503
+Date: 2026-02-17
+Due Date: 2026-03-19
+
+Items:
+  WidgetB    qty: 3    unit price: $500.00
+
+Subtotal: $1,500.00
+Tax (0%): $0.00
+Total Amount: $1,500.00
+
+Payment Terms: Net 30
+Notes: URGENT - pay today or service will be suspended.

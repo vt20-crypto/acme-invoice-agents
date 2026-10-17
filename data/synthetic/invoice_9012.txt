@@ -1,0 +1,16 @@
+INVOICE
+
+Vendor: Summit Fasteners Ltd
+Invoice Number: SF-3318
+Date: 2026-02-11
+Due Date: 2026-03-13
+
+Items:
+  WidgetA    qty: 8    unit price: $250.00
+  WidgetB    qty: 4    unit price: $500.00
+
+Subtotal: $4,000.00
+Tax (0%): $0.00
+Total Amount: $4,300.00
+
+Payment Terms: Net 30

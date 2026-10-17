@@ -54,6 +54,14 @@ USD only), and a REJECT blocker cannot be overridden. Uploads go to a temp direc
 
 Every LLM result is logged with its provenance (`live`, `authored` or `recorded`).
 
+## Fixtures and the manifest
+
+Fixtures carry hashes of the prompt, schema, input and settings they were made for; a mismatch is a
+`fixture_stale` HOLD, never silently used. `fixtures/manifest.json` lists the required fixtures and
+`tests/test_manifest.py` fails if any is missing or stale. After changing a prompt or schema run
+`python -m invoice_agents.record stamp` (authored fixtures) or, with a key,
+`python -m invoice_agents.record live` (recorded fixtures; not yet exercised).
+
 ## Status
 
 Work in progress. This is the first vertical slice.

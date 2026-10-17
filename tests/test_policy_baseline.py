@@ -1,4 +1,4 @@
-from conftest import INVOICES
+from conftest import FIXTURES, INVOICES, ROOT
 
 from invoice_agents.batch import run_batch
 
@@ -45,3 +45,21 @@ def test_note_level_findings_do_not_block_approval():
 
     notes = [Finding(code="risk_round_total", severity="note", message="n")]
     assert code_verdict(notes).value == "APPROVE"
+
+
+def test_9003_in_none_mode_is_a_coverage_hold_not_a_reject(db):
+    ((st, _),) = run_batch([ROOT / "data/synthetic/invoice_9003.txt"], db, None, "none")
+    assert st["decision"].value == "HOLD"
+    codes = {f.code: f for f in st["findings"]}
+    assert set(codes) == {"item_needs_mapping"} and codes["item_needs_mapping"].kind == "execution"
+    assert "all_items_unknown" not in codes
+
+
+def test_9001_approves_in_fixture_mode_with_note_findings_not_blocking(db):
+    from invoice_agents.llm.client import FixtureClient
+
+    ((st, _),) = run_batch(
+        [ROOT / "data/synthetic/invoice_9001.json"], db, FixtureClient(FIXTURES), "fixture"
+    )
+    assert st["decision"].value == "APPROVE" and st["payment"]["amount"] == 10750.0
+    assert any(c["agent"] == "critic" for c in st["llm_calls"])

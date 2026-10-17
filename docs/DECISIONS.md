@@ -50,3 +50,40 @@ total, currency) is a DUPLICATE: linked to the original, no payment, whatever th
 decision was. Same key with changed content is a revision: a HOLD blocker that shows the total
 delta, never auto-paid. Other blockers still apply, so a revision that also fails another check
 takes the stricter outcome.
+
+## 8. Execution failures are separate from business findings
+Findings carry `kind`: `business` (vendor or invoice defects, such as arithmetic, stock, revision)
+or `execution` (the system could not do its job: `llm_unavailable`, `fixture_missing`,
+`fixture_stale`, `extraction_failed`, `item_needs_mapping`, `critic_unresolved`, `vp_requires_llm`,
+`payment_failed`). A missing fixture is never a vendor defect. Results, JSONL, CLI and UI show
+"HOLD - system issue: ..." separately from business reasons. This renames the earlier
+`uncertain_extraction` to `extraction_failed` (or the specific cause).
+
+## 9. Unmapped item names without an LLM search are a HOLD, not a REJECT
+`all_items_unknown` (REJECT) now requires that an inventory search actually ran (LLM tool call) and
+found nothing. If code could not resolve a name and no search ran (`--llm none`, or the LLM step
+failed), the finding is `item_needs_mapping` (HOLD, execution). Effect: invoice_9003 in none mode is
+HOLD rather than REJECT, and invoice_1016 in none mode is HOLD for mapping rather than for a
+business `unknown_items`.
+
+## 10. Fixtures are bound to the prompt, schema, input and settings they were made for
+Each fixture stores hashes of the prompt (system + user template), schema, exact messages, model and
+settings. A mismatch at load is `fixture_stale` (HOLD, execution), never silently used.
+`fixtures/manifest.json` lists the required fixtures; a test fails if any is missing or stale.
+`authored` (hand-written) is kept distinct from `recorded` (captured live). Authored fixtures are
+stamped with hashes by `python -m invoice_agents.record stamp`; that asserts only that the response
+was written for that input, not that a model produced it.
+
+## 11. Human approval eligibility
+A reviewer cannot "Approve anyway" when: vendor, invoice number or a positive total is missing; the
+currency is not USD (no FX, no one-click non-USD approval); any REJECT blocker exists; or an
+extraction/mapping system issue left fields unverified. Enforced in `review.py` (backend) and by
+disabling the button with the reason in the UI. Payment still goes through the guard.
+
+## 12. Differences from PLAN section 4 (a policy baseline, not ground truth)
+- 1005: HOLD instead of REJECT (no documented signal beyond stock; see 3).
+- 1007: REJECT instead of HOLD (arithmetic does not reconcile; see 2).
+- 1013.json: REJECT instead of HOLD (arithmetic does not reconcile; see 2).
+- 1002, 1008, 1012 (both files), 1016 and 9001 in `--llm none`: HOLD for system reasons because the
+  task needs an LLM (messy text, OCR text, item mapping, VP review above 10,000).
+- 9003 has no section 4 entry.

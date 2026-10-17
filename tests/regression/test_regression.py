@@ -46,6 +46,21 @@ def test_none_mode(entry, none_run):
     assert sorted({f.code for f in state["findings"]}) == sorted(entry["codes"])
 
 
+def test_class_counts_sum_to_22():
+    from collections import Counter
+
+    for name in ("expected_none.yaml", "expected_fixture.yaml"):
+        counts = Counter(e["class"] for e in load(name))
+        assert sum(counts.values()) == 22, (name, counts)
+        assert set(counts) <= {"match", "policy mismatch", "expected exception", "missing fixture"}
+
+
+def test_fixture_mode_covers_every_document():
+    assert [e["file"] for e in load("expected_fixture.yaml")] == [
+        e["file"] for e in load("expected_none.yaml")
+    ]
+
+
 def test_none_mode_covers_all_20_samples_plus_synthetic():
     files = {Path(e["file"]).name for e in load("expected_none.yaml")}
     on_disk = {p.name for p in (ROOT / "data/invoices").iterdir()} | {

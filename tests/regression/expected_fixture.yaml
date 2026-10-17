@@ -1,7 +1,25 @@
-# Expected outcomes in `--llm fixture` mode for the files that have authored fixtures.
-# Files without fixtures would HOLD with "LLM unavailable" (covered by a separate test).
-- {file: data/invoices/invoice_1001.txt, decision: APPROVE, codes: [], paid: 5000.0}
-- {file: data/invoices/invoice_1002.txt, decision: HOLD, codes: [stock_exceeded]}
-- {file: data/invoices/invoice_1012.pdf, decision: HOLD, codes: [risk_near_threshold, risk_score, risk_vendor_identity_change]}
-- {file: data/synthetic/invoice_9001.json, decision: APPROVE, codes: [], paid: 10750.0, critic: true}
-- {file: data/synthetic/invoice_9003.txt, decision: APPROVE, codes: [], paid: 6095.0, tiers: [llm, llm, llm]}
+# Expected outcomes in `--llm fixture` mode for ALL 22 documents, same order. Documents without
+# authored fixtures HOLD as an execution failure (`fixture_missing`), classed `missing fixture`.
+# `plan4` is the PLAN section 4 baseline decision (policy baseline, not ground truth).
+- {"file": "data/invoices/invoice_1001.txt", "decision": "APPROVE", "codes": [], "plan4": "APPROVE", "class": "match", "paid": 5000.0}
+- {"file": "data/invoices/invoice_1002.txt", "decision": "HOLD", "codes": ["stock_exceeded"], "plan4": "HOLD", "class": "match"}
+- {"file": "data/invoices/invoice_1003.txt", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "REJECT", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1004.json", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "APPROVE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1004_revised.json", "decision": "HOLD", "codes": ["revision"], "plan4": "HOLD", "class": "match"}
+- {"file": "data/invoices/invoice_1005.json", "decision": "HOLD", "codes": ["stock_exceeded"], "plan4": "REJECT", "class": "policy mismatch"}
+- {"file": "data/invoices/invoice_1006.csv", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "APPROVE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1007.csv", "decision": "REJECT", "codes": ["arithmetic", "stock_exceeded"], "plan4": "HOLD", "class": "policy mismatch"}
+- {"file": "data/invoices/invoice_1008.txt", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "REJECT", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1009.json", "decision": "REJECT", "codes": ["bad_quantity", "missing_due_date", "missing_vendor", "subtotal_mismatch"], "plan4": "REJECT", "class": "match"}
+- {"file": "data/invoices/invoice_1010.txt", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "APPROVE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1011.pdf", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "APPROVE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1011.txt", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "DUPLICATE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1012.pdf", "decision": "HOLD", "codes": ["risk_near_threshold", "risk_score", "risk_vendor_identity_change"], "plan4": "HOLD", "class": "match"}
+- {"file": "data/invoices/invoice_1012.txt", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "DUPLICATE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1013.json", "decision": "REJECT", "codes": ["arithmetic", "stock_exceeded"], "plan4": "HOLD", "class": "policy mismatch"}
+- {"file": "data/invoices/invoice_1013.pdf", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "DUPLICATE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1014.xml", "decision": "HOLD", "codes": ["non_usd"], "plan4": "HOLD", "class": "match"}
+- {"file": "data/invoices/invoice_1015.csv", "decision": "HOLD", "codes": ["fixture_missing"], "plan4": "APPROVE", "class": "missing fixture"}
+- {"file": "data/invoices/invoice_1016.json", "decision": "HOLD", "codes": ["fixture_missing", "item_needs_mapping"], "plan4": "HOLD", "class": "missing fixture"}
+- {"file": "data/synthetic/invoice_9001.json", "decision": "APPROVE", "codes": [], "plan4": "APPROVE", "class": "match", "paid": 10750.0, "critic": true}
+- {"file": "data/synthetic/invoice_9003.txt", "decision": "APPROVE", "codes": [], "plan4": "n/a", "class": "match", "paid": 6095.0, "tiers": ["llm", "llm", "llm"]}

@@ -30,7 +30,13 @@ code decides, and code pays once per invoice.
 
 ## Quick start
 
+Prerequisites: Python 3.11 or newer (`requires-python = ">=3.11"` in `pyproject.toml`),
+[uv](https://docs.astral.sh/uv/), `make` and `git`. No API key is needed for the offline commands
+below (see "For reviewers" above).
+
 ```bash
+git clone https://github.com/vt20-crypto/acme-invoice-agents.git
+cd acme-invoice-agents
 make install                      # uv sync
 make test                         # no API key needed: tests replay recorded responses
 make run                          # invoice_1001, code-only, fresh database
@@ -75,6 +81,31 @@ shows a number that extraction could not read, the invoice is held for a person
 
 Rejections get a plain template message for the vendor (shown, not sent). Held invoices go to a
 human review queue; approving one still passes the same payment guard.
+
+**What a reviewer can resolve.** A reviewer must leave a note and can always **reject** an open
+HOLD (`review_hold()` in `src/invoice_agents/review.py`; the invoice becomes REJECT,
+`rejected_by_human`). **Approve** is allowed only when `approval_eligibility()` (same file) finds
+no blocker. Approve is refused for:
+
+- a ledger row that is not an open HOLD (already decided or already reviewed);
+- a missing vendor, a missing invoice number (no payment key can be formed), or a total that is
+  missing or not positive;
+- a currency other than USD (the rail is USD-only, no FX conversion);
+- any finding with severity `reject` ("A REJECT blocker cannot be overridden"), for example
+  `missing_vendor`, `missing_invoice_number`, `missing_total`, `missing_items`, `bad_quantity`,
+  `line_arithmetic`, `subtotal_mismatch`, `arithmetic`, `all_items_unknown`, a `vp_reject`, or a
+  high `risk_level`;
+- a system issue that left fields unverified: an execution-kind finding from the extraction or
+  item-resolution stage (`stage` of `extraction` or `resolve`) (for example `llm_unavailable`, `cache_missing`, `extraction_failed`,
+  `invoice_number_unreadable`); the reviewer is told to re-run once it is fixed.
+
+Any other HOLD can be approved, for example `invalid_due_date`, `arithmetic_unverifiable`,
+`item_needs_mapping`, `unknown_items`, `stock_exceeded`, `revision`, a `vp_hold`, and the
+approval-stage system issues `vp_requires_llm`, `critic_unresolved` and an LLM failure in the VP
+step (the system-issue block applies only to the extraction and item-resolution stages). Approval then calls `pay_invoice` with the key `vendor|invoice number`: if the guard
+refuses or the payer fails, the invoice stays on HOLD with the reason recorded; if the key was
+already paid, nothing is paid again (`approved_by_human_already_paid`). Only a successful payment
+makes the invoice APPROVE (`approved_by_human`).
 
 ## How the brief is met
 
@@ -173,11 +204,12 @@ harness. Manual-approval eligibility is covered by `tests/test_review.py` and
 is not a guarantee.
 
 **Recorded versus fresh live.** "Recorded Grok responses" are live responses captured on
-2026-10-17 and replayed deterministically in cache mode; tests, CI and `make eval` use only
-those. "Fresh live execution" so far is one smoke test on 2026-10-17: `data/synthetic/invoice_9011.pdf`
-with `--llm live` into an empty cache directory (extraction, VP draft and revision, critic twice:
-5 model calls, all provenance `live`, decision APPROVE as expected). The other 39 documents were
-not re-run live.
+2026-10-17 and replayed deterministically in cache mode. The 40-file evaluation, `make test` and
+CI replay those previously captured responses; none of them is a fresh live run. The only fresh
+live execution after the key rotation is one smoke test on 2026-10-17 covering **one invoice**,
+`data/synthetic/invoice_9011.pdf`, with explicit `--llm live` into an empty cache directory
+(extraction, VP draft and revision, critic twice: 5 model calls, all provenance `live`, decision
+APPROVE as expected). The other 39 documents were not re-run live.
 
 **Model calls per invoice.** There is no application-level call limit and no counter: the bound
 comes from the pipeline structure. Per invoice, at most 3 extraction calls (1 plus
@@ -267,6 +299,20 @@ resolution, due dates judged against the invoice date, the USD-only rail, duplic
 - Fixture manifests and stamping tooling
 - mypy, pip-audit, coverage gates and branch protection
 - Knowledge-transfer and operating-model documents
+
+### Known limitations of the prototype
+
+- **Money is floating point.** Amounts are Python `float` (`models.py:15-36`, `payments.py:31`,
+  stored as SQLite `REAL`), compared with a fixed tolerance of 0.01 (`TOLERANCE`, `config.py:4`;
+  used in `validation.py:203,220,238`). There is no `Decimal` or integer-cents handling, so
+  rounding behavior on large or many-line totals is not guaranteed.
+- **Payment reconciliation is not implemented.** `mock_payment` is synchronous and assumed to
+  succeed. If the payer raises or does not return `{"status": "success"}`, the payment row is set
+  to `failed` and the invoice becomes HOLD with a `payment_failed` finding
+  (`payments.py:56-61`, `graph.py:312-317`). The payment key stays used, so a later approval of
+  the same invoice reports `duplicate` rather than retrying; a process crash after the row is
+  inserted leaves it `pending`. There is no handling of pending or reversed payments, no retry
+  and no reconciliation against an external ledger.
 
 ## Extending the prototype
 

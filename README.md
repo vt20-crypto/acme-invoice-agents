@@ -267,3 +267,20 @@ resolution, due dates judged against the invoice date, the USD-only rail, duplic
 - Fixture manifests and stamping tooling
 - mypy, pip-audit, coverage gates and branch protection
 - Knowledge-transfer and operating-model documents
+
+## Extending the prototype
+
+- Policy constants: `src/invoice_agents/config.py`.
+- Deterministic validation rules: `src/invoice_agents/validation.py`; add a focused
+  rule test (`tests/test_validation.py`) and a regression case
+  (`tests/regression/expected.yaml`) when changing behavior.
+- New document formats: add a parser in `src/invoice_agents/ingestion/parsers.py` that
+  returns the shared `RawDocument` and register it in `PARSERS`.
+- Workflow changes: update the explicit graph in `src/invoice_agents/graph.py`.
+- Payment integrations: replace the injected `payer` (the callable passed to
+  `pay_invoice` in `src/invoice_agents/payments.py`, default `mock_payment`) only after
+  defining external idempotency, reconciliation, and failure-recovery semantics.
+- Model or prompt changes: re-record affected cached responses (`--llm live` writes to
+  `cache/llm/`) and rerun evaluation (`make eval`, `uv run python main.py eval --llm none`).
+
+This is a local prototype, not a production payment system.
